@@ -1,0 +1,80 @@
+# Quizzy — Project Rules
+
+## Project Overview
+
+We are building **Quizzy**, a multi-tenant gamified quiz portal for schools, students, and parents. Quizzy is a single unified portal instance hosting multiple schools with strict tenant isolation.
+
+**Before implementing or changing backend logic, read and follow `architecture_plan.md` in the project root.** That document is the source of truth for architecture, schema, modules, background workers, Redis patterns, and portability constraints.
+
+---
+
+## Tech Stack
+
+### Backend
+- **Runtime / framework:** Node.js with **NestJS** (TypeScript)
+- **Database:** PostgreSQL (relational data, multi-tenancy via `school_id`)
+- **Cache & real-time:** Redis (leaderboards, streaks, background task queues)
+- Services must remain cloud-agnostic and containerized (Docker); avoid vendor lock-in.
+
+### Frontend
+- **Framework:** React.js with **TypeScript**
+- **Styling:** **Tailwind CSS**
+- Follow `architecture_plan.md` for Shadcn UI, Recharts, and dynamic school whitelabeling.
+
+---
+
+## Multi-Tenancy (Non-Negotiable)
+
+Quizzy is **multi-tenant**. Every data access path must enforce tenant isolation.
+
+1. **`school_id` is required** on all tenant-scoped reads and writes (queries, repositories, services, raw SQL, and ORM filters).
+2. **Never** return, update, or delete rows without scoping by the authenticated user's allowed `school_id` (and role-based scope where applicable).
+3. Derive `school_id` from **verified JWT claims** — do not trust client-supplied tenant IDs without validation against the token/session.
+4. Cross-tenant access is forbidden unless the role explicitly allows it (e.g. Super Admin) and is implemented with explicit, audited checks per `architecture_plan.md`.
+5. Redis keys, cache entries, and queue payloads that hold tenant data must include `school_id` in the key or payload structure.
+
+### Examples
+
+```typescript
+// BAD — no tenant scope
+await this.quizRepository.find({ where: { id: quizId } });
+
+// GOOD — always scope by school_id
+await this.quizRepository.find({
+  where: { id: quizId, school_id: user.schoolId },
+});
+```
+
+```sql
+-- BAD
+SELECT * FROM questions WHERE quiz_id = $1;
+
+-- GOOD
+SELECT * FROM questions WHERE quiz_id = $1 AND school_id = $2;
+```
+
+---
+
+## Backend Development
+
+- Align modules, folder structure, ERD, workers, and Redis design with **`architecture_plan.md`**.
+- Use NestJS patterns: modules, guards, interceptors, and DTOs with validation.
+- Auth: RBAC for Super Admin, School Admin/Teacher, Student, and Parent.
+- AI generation: async queue pattern (`202 Accepted` + task ID), structured JSON from LLMs, and metadata fields (`source_type`, `ai_model_used`, etc.) as defined in the plan.
+- File storage: S3-compatible APIs only; no cloud-specific SDKs tied to a single vendor.
+
+---
+
+## Frontend Development
+
+- TypeScript + React + Tailwind CSS.
+- Load tenant branding (logo, colors) from the user's school profile after login and apply via a global theme context.
+- API calls must not send arbitrary `school_id` to bypass server-side checks; the backend enforces isolation.
+
+---
+
+## General Principles
+
+- Prefer small, focused changes that match existing conventions.
+- Keep services decoupled and Docker-ready.
+- When in doubt about schema, flows, or boundaries, consult **`architecture_plan.md`** before coding.

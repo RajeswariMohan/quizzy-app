@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-primary: 93 95 239;
+  --color-secondary: 124 58 237;
+  --color-primary-hex: #5d5fef;
+  --color-secondary-hex: #7c3aed;
+}
+
+body {
+  @apply bg-surface font-sans text-ink antialiased;
+}
+
+#root {
+  min-height: 100vh;
+}
