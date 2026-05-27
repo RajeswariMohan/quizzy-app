@@ -60,14 +60,27 @@ describe('Auth & RBAC (e2e)', () => {
       });
   });
 
-  it('GET /api/me allows super admin', () => {
+  it('GET /api/me allows super admin with acting school context', () => {
     return request(app.getHttpServer())
       .get('/api/me')
       .set('Authorization', `Bearer ${superAdminToken}`)
+      .set('X-School-Ids', SCHOOL_ID)
       .expect(200)
       .expect((res) => {
         expect(res.body.role).toBe('SUPER_ADMIN');
-        expect(res.body.schoolId).toBeNull();
+        expect(res.body.actingSchoolId).toBe(SCHOOL_ID);
+        expect(res.body.schoolName).toBeTruthy();
+      });
+  });
+
+  it('GET /api/quizzes/dashboard/overview works for super admin with school context', () => {
+    return request(app.getHttpServer())
+      .get('/api/quizzes/dashboard/overview')
+      .set('Authorization', `Bearer ${superAdminToken}`)
+      .set('X-School-Ids', SCHOOL_ID)
+      .expect(200)
+      .expect((res) => {
+        expect(res.body.stats).toBeDefined();
       });
   });
 

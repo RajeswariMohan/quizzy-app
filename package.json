@@ -1,0 +1,17 @@
+{
+  "name": "quizzy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Quizzy quiz portal — test runners",
+  "scripts": {
+    "test": "bash tests/run-all.sh",
+    "test:backend:unit": "cd backend && npm test",
+    "test:backend:e2e": "bash tests/run-backend-e2e.sh",
+    "test:backend:unit:coverage": "cd backend && npm run test:coverage",
+    "test:frontend": "vitest run --config tests/vitest.config.ts",
+    "test:frontend:watch": "vitest --config tests/vitest.config.ts"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.5"
+  }
+}

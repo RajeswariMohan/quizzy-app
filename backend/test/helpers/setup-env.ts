@@ -8,4 +8,6 @@ export function applyTestEnvironment(): void {
   process.env.DATABASE_USER = process.env.DATABASE_USER ?? 'quizzy';
   process.env.DATABASE_PASSWORD = process.env.DATABASE_PASSWORD ?? 'quizzy';
   process.env.DATABASE_NAME = process.env.DATABASE_NAME ?? 'quizzy';
+  process.env.DEFAULT_SCHOOL_ID =
+    process.env.DEFAULT_SCHOOL_ID ?? '11111111-1111-1111-1111-111111111111';
 }

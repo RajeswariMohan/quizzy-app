@@ -33,7 +33,7 @@ export class PermissionsGuard implements CanActivate {
       throw new ForbiddenException('Authentication required for permission check');
     }
 
-    const allowed = requiredPermissions.every((permission) =>
+    const allowed = requiredPermissions.some((permission) =>
       hasPermission(tenantContext.role, permission),
     );
 

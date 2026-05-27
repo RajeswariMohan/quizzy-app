@@ -3,41 +3,128 @@ import {
   Award,
   BarChart3,
   BookOpen,
+  Building2,
+  ClipboardList,
+  MessageSquare,
+  Database,
   ChevronLeft,
   GraduationCap,
   LayoutDashboard,
   LogOut,
   Menu,
   Settings,
+  SlidersHorizontal,
+  User,
   Users,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/cn';
+import { SuperAdminSchoolFilter } from '@/components/admin/SuperAdminSchoolFilter';
 import { useAuthStore } from '@/store/authStore';
+import { useSessionTracker } from '@/hooks/useSessionTracker';
 import { useTenantTheme } from '@/hooks/useTenantTheme';
 import type { UserRole } from '@/types/auth';
+import { roleHome } from '@/utils/roleHome';
 
 interface NavItem {
   to: string;
   label: string;
   icon: typeof LayoutDashboard;
   roles: UserRole[];
+  /** Match pathname exactly (avoids highlighting Dashboard when on a child route) */
+  end?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/student', label: 'Dashboard', icon: LayoutDashboard, roles: ['STUDENT'] },
+  { to: '/student', label: 'Dashboard', icon: LayoutDashboard, roles: ['STUDENT'], end: true },
   { to: '/student/leaderboard', label: 'Leaderboard', icon: Award, roles: ['STUDENT'] },
-  { to: '/teacher', label: 'Dashboard', icon: LayoutDashboard, roles: ['TEACHER', 'SCHOOL_ADMIN'] },
-  { to: '/teacher/quizzes', label: 'Quizzes', icon: BookOpen, roles: ['TEACHER', 'SCHOOL_ADMIN'] },
-  { to: '/teacher/analytics', label: 'Analytics', icon: BarChart3, roles: ['TEACHER', 'SCHOOL_ADMIN'] },
-  { to: '/parent', label: 'Insights', icon: Users, roles: ['PARENT'] },
+  { to: '/feedback', label: 'Feedback', icon: MessageSquare, roles: ['STUDENT'] },
+  {
+    to: '/teacher',
+    label: 'Dashboard',
+    icon: LayoutDashboard,
+    roles: ['TEACHER'],
+    end: true,
+  },
+  {
+    to: '/teacher/quizzes',
+    label: 'Quizzes',
+    icon: BookOpen,
+    roles: ['TEACHER'],
+  },
+  {
+    to: '/teacher/analytics',
+    label: 'Analytics',
+    icon: BarChart3,
+    roles: ['TEACHER'],
+  },
+  {
+    to: '/progress',
+    label: 'Progress',
+    icon: ClipboardList,
+    roles: ['TEACHER'],
+  },
+  { to: '/parent', label: 'Insights', icon: Users, roles: ['PARENT'], end: true },
+  { to: '/feedback', label: 'Feedback', icon: MessageSquare, roles: ['PARENT'] },
+  {
+    to: '/progress',
+    label: 'Progress',
+    icon: ClipboardList,
+    roles: ['PARENT'],
+  },
+  { to: '/school-admin', label: 'School', icon: LayoutDashboard, roles: ['SCHOOL_ADMIN'], end: true },
+  { to: '/school-admin/users', label: 'Users', icon: Users, roles: ['SCHOOL_ADMIN'] },
+  {
+    to: '/school-admin/academics',
+    label: 'Academics',
+    icon: GraduationCap,
+    roles: ['SCHOOL_ADMIN'],
+  },
+  {
+    to: '/teacher/quizzes',
+    label: 'Quizzes',
+    icon: BookOpen,
+    roles: ['SCHOOL_ADMIN'],
+  },
+  {
+    to: '/teacher/analytics',
+    label: 'Analytics',
+    icon: BarChart3,
+    roles: ['SCHOOL_ADMIN'],
+  },
+  {
+    to: '/progress',
+    label: 'Progress',
+    icon: ClipboardList,
+    roles: ['SCHOOL_ADMIN'],
+  },
+  { to: '/feedback', label: 'Feedback', icon: MessageSquare, roles: ['SCHOOL_ADMIN'] },
+  { to: '/school-admin/data', label: 'Backup', icon: Database, roles: ['SCHOOL_ADMIN'] },
+  { to: '/admin', label: 'Platform', icon: LayoutDashboard, roles: ['SUPER_ADMIN'], end: true },
+  { to: '/admin/schools', label: 'Schools', icon: Building2, roles: ['SUPER_ADMIN'] },
+  { to: '/admin/analytics', label: 'Analytics', icon: BarChart3, roles: ['SUPER_ADMIN'] },
+  { to: '/admin/settings', label: 'Features', icon: SlidersHorizontal, roles: ['SUPER_ADMIN'] },
+  { to: '/admin/feedback', label: 'Feedback', icon: MessageSquare, roles: ['SUPER_ADMIN'] },
+  { to: '/admin/data', label: 'Backup', icon: Database, roles: ['SUPER_ADMIN'] },
+  {
+    to: '/teacher/quizzes',
+    label: 'Quizzes',
+    icon: BookOpen,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    to: '/progress',
+    label: 'Progress',
+    icon: ClipboardList,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    to: '/profile',
+    label: 'Profile',
+    icon: User,
+    roles: ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'TEACHER', 'STUDENT', 'PARENT'],
+  },
 ];
-
-function roleHome(role: UserRole): string {
-  if (role === 'STUDENT') return '/student';
-  if (role === 'PARENT') return '/parent';
-  return '/teacher';
-}
 
 export function DashboardLayout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -45,11 +132,13 @@ export function DashboardLayout() {
   const { user, logout } = useAuthStore();
   const { tenantProfile } = useTenantTheme();
   const navigate = useNavigate();
+  useSessionTracker();
 
   const items = NAV_ITEMS.filter((item) => user && item.roles.includes(user.role));
+  const settingsPath = user?.role === 'SUPER_ADMIN' ? '/admin/settings' : undefined;
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/login');
   };
 
@@ -58,11 +147,11 @@ export function DashboardLayout() {
       {/* Sidebar — desktop */}
       <aside
         className={cn(
-          'hidden flex-col border-r border-gray-200 bg-ink text-white transition-all duration-300 lg:flex',
+          'sticky top-0 hidden h-screen max-h-screen shrink-0 flex-col border-r border-gray-200 bg-ink text-white transition-all duration-300 lg:flex',
           collapsed ? 'w-[72px]' : 'w-64',
         )}
       >
-        <div className="flex items-center gap-3 border-b border-white/10 p-4">
+        <div className="flex shrink-0 items-center gap-3 border-b border-white/10 p-4">
           {tenantProfile.logoUrl ? (
             <img src={tenantProfile.logoUrl} alt="" className="h-9 w-9 rounded-lg object-cover" />
           ) : (
@@ -78,11 +167,12 @@ export function DashboardLayout() {
           )}
         </div>
 
-        <nav className="flex-1 space-y-1 p-3">
-          {items.map(({ to, label, icon: Icon }) => (
+        <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto overflow-x-hidden p-3">
+          {items.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}
+              end={end}
               className={({ isActive }) =>
                 cn(
                   'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition',
@@ -96,10 +186,12 @@ export function DashboardLayout() {
           ))}
         </nav>
 
-        <div className="space-y-1 border-t border-white/10 p-3">
+        <div className="shrink-0 space-y-1 border-t border-white/10 p-3">
           <button
             type="button"
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-white/70 hover:bg-white/10"
+            onClick={() => settingsPath && navigate(settingsPath)}
+            disabled={!settingsPath}
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-white/70 hover:bg-white/10 disabled:opacity-40"
           >
             <Settings className="h-5 w-5" />
             {!collapsed && 'Settings'}
@@ -124,21 +216,43 @@ export function DashboardLayout() {
             onClick={() => setMobileOpen(false)}
             aria-label="Close menu"
           />
-          <aside className="relative flex h-full w-64 flex-col bg-ink text-white">
-            <div className="p-4 font-semibold">{tenantProfile.schoolName}</div>
-            <nav className="flex-1 space-y-1 p-3">
-              {items.map(({ to, label, icon: Icon }) => (
+          <aside className="relative flex h-full max-h-screen w-64 flex-col bg-ink text-white">
+            <div className="shrink-0 border-b border-white/10 p-4">
+              <p className="font-semibold">{tenantProfile.schoolName}</p>
+              <p className="text-xs text-white/60">Quizzy Portal</p>
+            </div>
+            <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
+              {items.map(({ to, label, icon: Icon, end }) => (
                 <NavLink
                   key={to}
                   to={to}
+                  end={end}
                   onClick={() => setMobileOpen(false)}
-                  className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm hover:bg-white/10"
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition',
+                      isActive ? 'bg-primary text-white' : 'text-white/70 hover:bg-white/10',
+                    )
+                  }
                 >
                   <Icon className="h-5 w-5" />
                   {label}
                 </NavLink>
               ))}
             </nav>
+            <div className="shrink-0 space-y-1 border-t border-white/10 p-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileOpen(false);
+                  handleLogout();
+                }}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-white/70 hover:bg-white/10"
+              >
+                <LogOut className="h-5 w-5" />
+                Logout
+              </button>
+            </div>
           </aside>
         </div>
       )}
@@ -167,14 +281,42 @@ export function DashboardLayout() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="hidden text-right sm:block">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {user?.role === 'SUPER_ADMIN' && <SuperAdminSchoolFilter />}
+            <button
+              type="button"
+              onClick={() => navigate('/profile')}
+              className="hidden text-right sm:block rounded-lg px-2 py-1 hover:bg-gray-100"
+            >
               <p className="text-sm font-medium">{user?.displayName ?? user?.email}</p>
               <p className="text-xs text-muted">{user?.role.replace('_', ' ')}</p>
-            </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-              {(user?.displayName ?? 'U').charAt(0).toUpperCase()}
-            </div>
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 rounded-xl px-2.5 py-2 text-sm font-medium text-muted hover:bg-gray-100 hover:text-ink sm:px-3"
+              aria-label="Log out"
+            >
+              <LogOut className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/profile')}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary hover:ring-2 hover:ring-primary/30"
+              title="My profile"
+              aria-label="My profile"
+            >
+              {user?.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt=""
+                  className="h-full w-full rounded-full object-cover"
+                />
+              ) : (
+                (user?.displayName ?? 'U').charAt(0).toUpperCase()
+              )}
+            </button>
           </div>
         </header>
 
@@ -184,18 +326,19 @@ export function DashboardLayout() {
 
         {/* Mobile bottom nav */}
         <nav className="flex border-t border-gray-200 bg-white lg:hidden">
-          {items.slice(0, 4).map(({ to, icon: Icon }) => (
+          {items.slice(0, 4).map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
               className={({ isActive }) =>
                 cn(
-                  'flex flex-1 flex-col items-center gap-1 py-2 text-xs',
+                  'flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium',
                   isActive ? 'text-primary' : 'text-muted',
                 )
               }
             >
               <Icon className="h-5 w-5" />
+              <span className="truncate px-1">{label.split(' ')[0]}</span>
             </NavLink>
           ))}
         </nav>

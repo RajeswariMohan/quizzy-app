@@ -1,5 +1,10 @@
 import { apiClient } from './client';
-import type { CreateQuizPayload, QuizSummary } from '@/types/quiz';
+import type {
+  CreateQuizPayload,
+  PublishQuizPayload,
+  QuizSummary,
+  UpdateQuizPayload,
+} from '@/types/quiz';
 
 export async function createQuiz(payload: CreateQuizPayload): Promise<QuizSummary> {
   const { data } = await apiClient.post<QuizSummary>('/quizzes', payload);
@@ -8,5 +13,43 @@ export async function createQuiz(payload: CreateQuizPayload): Promise<QuizSummar
 
 export async function getQuiz(quizId: string): Promise<QuizSummary & { description?: string }> {
   const { data } = await apiClient.get(`/quizzes/${quizId}`);
+  return data;
+}
+
+export async function listQuizzes(): Promise<QuizSummary[]> {
+  const { data } = await apiClient.get<QuizSummary[]>('/quizzes');
+  return data;
+}
+
+export async function updateQuiz(
+  quizId: string,
+  payload: UpdateQuizPayload,
+): Promise<QuizSummary & { description?: string | null }> {
+  const { data } = await apiClient.patch(`/quizzes/${quizId}`, payload);
+  return data;
+}
+
+export async function unpublishQuiz(quizId: string): Promise<{
+  id: string;
+  status: string;
+  publishedAt: string | null;
+  questionCount: number;
+}> {
+  const { data } = await apiClient.patch(`/quizzes/${quizId}/unpublish`);
+  return data;
+}
+
+export async function publishQuiz(
+  quizId: string,
+  payload: PublishQuizPayload,
+): Promise<{
+  id: string;
+  status: string;
+  publishedAt: string;
+  questionCount: number;
+  audienceScope: string;
+  audienceTargets: { grade: string; section: string }[];
+}> {
+  const { data } = await apiClient.patch(`/quizzes/${quizId}/publish`, payload);
   return data;
 }

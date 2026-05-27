@@ -2,10 +2,12 @@ import {
   Body,
   Controller,
   Get,
+  Delete,
   HttpCode,
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
 } from '@nestjs/common';
 import { UserRole } from '@database/enums/user-role.enum';
@@ -15,6 +17,8 @@ import { TenantContext } from '../auth/interfaces/tenant-context.interface';
 import { AiGenerationService } from '../ai-generation/ai-generation.service';
 import { AiGenerateQuestionsDto } from './dto/ai-generate-questions.dto';
 import { CreateManualQuestionDto } from './dto/create-manual-question.dto';
+import { BulkImportQuestionsDto } from './dto/bulk-import-questions.dto';
+import { UpdateQuestionDto } from './dto/update-question.dto';
 import { QuestionService } from './question.service';
 
 @Controller('quizzes/:quizId/questions')
@@ -44,6 +48,48 @@ export class QuestionController {
       aiGenerationTaskId: q.aiGenerationTaskId,
       points: q.points,
     }));
+  }
+
+  @Delete(':questionId')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(Permission.MANAGE_QUESTIONS)
+  remove(
+    @CurrentTenant() tenant: TenantContext,
+    @Param('quizId', ParseUUIDPipe) quizId: string,
+    @Param('questionId', ParseUUIDPipe) questionId: string,
+  ) {
+    return this.questionService.remove(tenant, quizId, questionId);
+  }
+
+  @Patch(':questionId')
+  @RequirePermissions(Permission.MANAGE_QUESTIONS)
+  async update(
+    @CurrentTenant() tenant: TenantContext,
+    @Param('quizId', ParseUUIDPipe) quizId: string,
+    @Param('questionId', ParseUUIDPipe) questionId: string,
+    @Body() dto: UpdateQuestionDto,
+  ) {
+    const question = await this.questionService.update(tenant, quizId, questionId, dto);
+    return {
+      id: question.id,
+      questionText: question.questionText,
+      options: question.options,
+      correctOptionIndex: question.correctOptionIndex,
+      explanation: question.explanation,
+      orderIndex: question.orderIndex,
+      sourceType: question.sourceType,
+      points: question.points,
+    };
+  }
+
+  @Post('bulk')
+  @RequirePermissions(Permission.MANAGE_QUESTIONS)
+  async bulkImport(
+    @CurrentTenant() tenant: TenantContext,
+    @Param('quizId', ParseUUIDPipe) quizId: string,
+    @Body() dto: BulkImportQuestionsDto,
+  ) {
+    return this.questionService.bulkCreateManual(tenant, quizId, dto.questions);
   }
 
   @Post('manual')

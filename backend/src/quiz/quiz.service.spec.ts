@@ -3,10 +3,13 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Class } from '@database/entities/class.entity';
 import { Quiz } from '@database/entities/quiz.entity';
+import { StudentResponse } from '@database/entities/student-response.entity';
+import { User } from '@database/entities/user.entity';
 import { QuizStatus } from '@database/enums/quiz-status.enum';
 import { buildTeacherTenant } from '../../test/helpers/tenant-fixtures';
 import { SCHOOL_ID, TEST_CLASS_ID } from '../../test/helpers/constants';
 import { TenantContextService } from '../auth/services/tenant-context.service';
+import { SchoolAcademicsService } from '../school-admin/school-academics.service';
 import { QuizService } from './quiz.service';
 
 describe('QuizService', () => {
@@ -36,9 +39,27 @@ describe('QuizService', () => {
           useValue: { findOne: classFindOne },
         },
         {
+          provide: getRepositoryToken(StudentResponse),
+          useValue: { createQueryBuilder: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(User),
+          useValue: { count: jest.fn(), createQueryBuilder: jest.fn() },
+        },
+        {
           provide: TenantContextService,
           useValue: {
             resolveSchoolIdForQuery: jest.fn(() => SCHOOL_ID),
+          },
+        },
+        {
+          provide: SchoolAcademicsService,
+          useValue: {
+            getForSchoolId: jest.fn().mockResolvedValue({
+              grades: ['Class 8'],
+              sections: ['A'],
+              subjects: ['Science'],
+            }),
           },
         },
       ],

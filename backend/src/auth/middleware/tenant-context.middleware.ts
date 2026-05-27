@@ -4,6 +4,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { NextFunction, Request, Response } from 'express';
+import { SessionService } from '../services/session.service';
 import { TenantContextService } from '../services/tenant-context.service';
 import { TokenService } from '../services/token.service';
 
@@ -16,6 +17,7 @@ export class TenantContextMiddleware implements NestMiddleware {
   constructor(
     private readonly tokenService: TokenService,
     private readonly tenantContextService: TenantContextService,
+    private readonly sessionService: SessionService,
   ) {}
 
   async use(req: Request, _res: Response, next: NextFunction): Promise<void> {
@@ -27,7 +29,20 @@ export class TenantContextMiddleware implements NestMiddleware {
 
     try {
       const payload = await this.tokenService.verifyAccessToken(token);
-      req.tenantContext = await this.tenantContextService.buildFromPayload(payload);
+      if (payload.sid) {
+        await this.sessionService.assertSessionActive(payload.sid);
+      }
+      const context = await this.tenantContextService.buildFromPayload(payload);
+      const schoolIdsHeader = this.headerValue(req.headers['x-school-ids']);
+      const schoolIdHeader = this.headerValue(req.headers['x-school-id']);
+      req.tenantContext = await this.tenantContextService.applySuperAdminScope(
+        context,
+        schoolIdsHeader,
+        schoolIdHeader,
+      );
+      if (payload.sid) {
+        void this.sessionService.touchSession(payload.sid);
+      }
       next();
     } catch (error) {
       if (error instanceof UnauthorizedException) {
@@ -36,6 +51,11 @@ export class TenantContextMiddleware implements NestMiddleware {
       }
       next(new UnauthorizedException('Invalid or expired access token'));
     }
+  }
+
+  private headerValue(value: string | string[] | undefined): string | undefined {
+    if (Array.isArray(value)) return value[0];
+    return value;
   }
 
   private extractBearerToken(req: Request): string | null {

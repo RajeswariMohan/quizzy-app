@@ -12,12 +12,16 @@ export class TokenService {
     private readonly configService: ConfigService,
   ) {}
 
-  signAccessToken(user: Pick<User, 'id' | 'email' | 'role' | 'schoolId'>): string {
+  signAccessToken(
+    user: Pick<User, 'id' | 'email' | 'role' | 'schoolId'>,
+    sessionId?: string,
+  ): string {
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
       role: user.role,
       school_id: user.schoolId,
+      ...(sessionId ? { sid: sessionId } : {}),
     };
 
     const expiresIn = getJwtExpiresIn(this.configService);

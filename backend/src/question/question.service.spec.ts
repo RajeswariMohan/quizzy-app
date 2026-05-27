@@ -1,6 +1,8 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { QuizStatus } from '@database/enums/quiz-status.enum';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { Question } from '@database/entities/question.entity';
 import { Quiz } from '@database/entities/quiz.entity';
 import { QuestionSourceType } from '@database/enums/question-source-type.enum';
@@ -14,13 +16,26 @@ describe('QuestionService', () => {
   let questionSave: jest.Mock;
   let questionCount: jest.Mock;
   let questionFind: jest.Mock;
+  let questionFindOne: jest.Mock;
   let quizFindOne: jest.Mock;
 
   beforeEach(async () => {
     questionSave = jest.fn((entity) => Promise.resolve({ id: 'q-new', ...entity }));
     questionCount = jest.fn().mockResolvedValue(2);
     questionFind = jest.fn().mockResolvedValue([]);
-    quizFindOne = jest.fn().mockResolvedValue({ id: TEST_QUIZ_ID, schoolId: SCHOOL_ID });
+    questionFindOne = jest.fn().mockResolvedValue({
+      id: 'q-existing',
+      schoolId: SCHOOL_ID,
+      quizId: TEST_QUIZ_ID,
+      questionText: 'Old?',
+      options: ['A', 'B', 'C', 'D'],
+      correctOptionIndex: 0,
+    });
+    quizFindOne = jest.fn().mockResolvedValue({
+      id: TEST_QUIZ_ID,
+      schoolId: SCHOOL_ID,
+      status: QuizStatus.DRAFT,
+    });
 
     const module = await Test.createTestingModule({
       providers: [
@@ -32,6 +47,7 @@ describe('QuestionService', () => {
             save: questionSave,
             count: questionCount,
             find: questionFind,
+            findOne: questionFindOne,
           },
         },
         {
@@ -41,6 +57,12 @@ describe('QuestionService', () => {
         {
           provide: TenantContextService,
           useValue: { resolveSchoolIdForQuery: jest.fn(() => SCHOOL_ID) },
+        },
+        {
+          provide: DataSource,
+          useValue: {
+            transaction: jest.fn((cb) => cb({})),
+          },
         },
       ],
     }).compile();
@@ -72,6 +94,58 @@ describe('QuestionService', () => {
         correctOptionIndex: 0,
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('bulk creates manual questions with sequential order', async () => {
+    const result = await service.bulkCreateManual(buildTeacherTenant(), TEST_QUIZ_ID, [
+      {
+        questionText: 'Q1?',
+        options: ['A', 'B', 'C', 'D'],
+        correctOptionIndex: 0,
+      },
+      {
+        questionText: 'Q2?',
+        options: ['A', 'B', 'C', 'D'],
+        correctOptionIndex: 1,
+      },
+    ]);
+
+    expect(result.importedCount).toBe(2);
+    expect(questionSave).toHaveBeenCalledTimes(2);
+  });
+
+  it('updates question fields on draft quiz', async () => {
+    const updated = await service.update(
+      buildTeacherTenant(),
+      TEST_QUIZ_ID,
+      'q-existing',
+      {
+        questionText: 'New text?',
+        options: ['1', '2', '3', '4'],
+        correctOptionIndex: 2,
+        explanation: 'Because 3.',
+      },
+    );
+
+    expect(questionSave).toHaveBeenCalled();
+    expect(updated.questionText).toBe('New text?');
+    expect(updated.correctOptionIndex).toBe(2);
+  });
+
+  it('rejects update when quiz is published', async () => {
+    quizFindOne.mockResolvedValue({
+      id: TEST_QUIZ_ID,
+      schoolId: SCHOOL_ID,
+      status: QuizStatus.PUBLISHED,
+    });
+
+    await expect(
+      service.update(buildTeacherTenant(), TEST_QUIZ_ID, 'q-existing', {
+        questionText: 'X?',
+        options: ['A', 'B', 'C', 'D'],
+        correctOptionIndex: 0,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('lists questions filtered by school_id and quiz_id', async () => {

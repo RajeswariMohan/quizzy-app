@@ -6,6 +6,8 @@ export interface JwtPayload {
   email: string;
   role: UserRole;
   school_id: string | null;
+  /** Login session id for engagement tracking */
+  sid?: string;
   iat?: number;
   exp?: number;
 }

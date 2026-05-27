@@ -5,21 +5,21 @@
  *   npm run issue-token
  *   npm run issue-token -- teacher
  *   npm run issue-token -- student
- *   npm run issue-token -- admin
+ *   npm run issue-token -- schooladmin
+ *   npm run issue-token -- superadmin
  */
 import { config } from 'dotenv';
 import { resolve } from 'node:path';
 import { sign } from 'jsonwebtoken';
 import { Client } from 'pg';
+import { DEV_SEED_USER_IDS, resolveDevSeedRole } from '../src/auth/constants/dev-seed-users';
 
-// Always use backend/.env so tokens match the running API (ignore shell JWT_SECRET).
-config({ path: resolve(__dirname, '../.env'), override: true });
+// Match Nest ConfigModule.forRoot({ envFilePath: ['.env.local', '.env'] }):
+// shell env wins; .env files only fill missing values.
+config({ path: resolve(__dirname, '../.env.local') });
+config({ path: resolve(__dirname, '../.env') });
 
-const USERS = {
-  teacher: '22222222-2222-2222-2222-222222222222',
-  student: '33333333-3333-3333-3333-333333333333',
-  admin: '44444444-4444-4444-4444-444444444444',
-} as const;
+const USERS = DEV_SEED_USER_IDS;
 
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET?.trim();
@@ -32,11 +32,18 @@ function getJwtSecret(): string {
 }
 
 async function main() {
-  const role = (process.argv[2] ?? 'teacher') as keyof typeof USERS;
-  const userId = USERS[role];
+  const roleArg = process.argv[2] ?? 'teacher';
+  let role: keyof typeof DEV_SEED_USER_IDS;
+  try {
+    role = resolveDevSeedRole(roleArg);
+  } catch {
+    console.error(`Unknown role. Use: ${Object.keys(DEV_SEED_USER_IDS).join(', ')} (admin = superadmin)`);
+    process.exit(1);
+  }
+  const userId = DEV_SEED_USER_IDS[role];
 
   if (!userId) {
-    console.error(`Unknown role. Use: ${Object.keys(USERS).join(', ')}`);
+    console.error(`Unknown role. Use: ${Object.keys(DEV_SEED_USER_IDS).join(', ')}`);
     process.exit(1);
   }
 

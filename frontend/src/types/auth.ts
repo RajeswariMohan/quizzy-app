@@ -1,12 +1,9 @@
+import type { UserProfile } from '@/types/profile';
+
 export type UserRole = 'SUPER_ADMIN' | 'SCHOOL_ADMIN' | 'TEACHER' | 'STUDENT' | 'PARENT';
 
-export interface MeResponse {
-  userId: string;
-  email: string;
-  role: UserRole;
-  schoolId: string | null;
-  isTenantScoped: boolean;
-}
+/** Same shape as GET /me and PATCH /me responses. */
+export type MeResponse = UserProfile;
 
 export interface TenantProfile {
   schoolId: string | null;
@@ -17,6 +14,4 @@ export interface TenantProfile {
   slug?: string;
 }
 
-export interface AuthUser extends MeResponse {
-  displayName?: string;
-}
+export type AuthUser = MeResponse;

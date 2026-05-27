@@ -18,7 +18,9 @@ INSERT INTO quizzes (
   title,
   status,
   subject,
-  topic
+  topic,
+  board,
+  grade
 )
 VALUES (
   'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
@@ -28,6 +30,8 @@ VALUES (
   'Science Quiz — Photosynthesis',
   'DRAFT',
   'Science',
-  'Photosynthesis'
+  'Photosynthesis',
+  'CBSE',
+  'Class 5'
 )
 ON CONFLICT (id) DO NOTHING;

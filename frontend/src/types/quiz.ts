@@ -1,17 +1,47 @@
 export type QuizStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+
+export type QuizAudienceScope = 'SCHOOL' | 'GRADE_SECTION';
+
+export interface QuizAudienceTarget {
+  grade: string;
+  section: string;
+}
+
+export interface PublishQuizPayload {
+  audienceScope: QuizAudienceScope;
+  targets?: QuizAudienceTarget[];
+}
+
+export interface QuizCreator {
+  userId: string;
+  displayName: string;
+  email: string;
+  role: string;
+}
 export type QuestionSourceType = 'MANUAL' | 'AI_GENERATED';
 export type AiGenerationStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
 
 export interface QuizSummary {
   id: string;
-  schoolId: string;
+  schoolId?: string;
+  schoolName?: string | null;
   classId: string;
   title: string;
   status: QuizStatus;
   subject?: string | null;
   topic?: string | null;
+  board?: string | null;
+  grade?: string | null;
   questionCount?: number;
+  className?: string | null;
+  avgAccuracy?: number | null;
+  createdBy?: QuizCreator | null;
   createdAt?: string;
+  updatedAt?: string;
+  publishedAt?: string | null;
+  audienceScope?: QuizAudienceScope;
+  audienceTargets?: QuizAudienceTarget[];
+  classSection?: string | null;
 }
 
 export interface QuestionItem {
@@ -28,8 +58,17 @@ export interface QuestionItem {
 }
 
 export interface CreateQuizPayload {
-  classId: string;
+  classId?: string;
   title: string;
+  description?: string;
+  subject?: string;
+  topic?: string;
+  board?: string;
+  grade?: string;
+}
+
+export interface UpdateQuizPayload {
+  title?: string;
   description?: string;
   subject?: string;
   topic?: string;
@@ -42,6 +81,7 @@ export interface ManualQuestionPayload {
   options: [string, string, string, string];
   correctOptionIndex: number;
   explanation?: string;
+  points?: number;
 }
 
 export interface AiGeneratePayload {

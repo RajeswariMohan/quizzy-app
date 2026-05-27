@@ -1,139 +1,133 @@
-import { Download, Users } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { BarChart3, BookOpen, ChevronRight, RefreshCw } from 'lucide-react';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { ClassBarChart } from '@/components/charts/ClassBarChart';
-import { TopicDonutChart } from '@/components/charts/TopicDonutChart';
-import { QuizCreatorForm } from '@/components/quiz/QuizCreatorForm';
-import type { ChartPoint, TopicMastery } from '@/types/dashboard';
-
-const STATS = [
-  { label: 'Total Students', value: '42' },
-  { label: 'Quizzes Conducted', value: '12' },
-  { label: 'Avg Accuracy', value: '76%' },
-  { label: 'Top Score', value: '98%' },
-];
-
-const QUIZ_PERFORMANCE: ChartPoint[] = [
-  { label: 'Quiz 1', value: 68 },
-  { label: 'Quiz 2', value: 72 },
-  { label: 'Quiz 3', value: 81 },
-  { label: 'Quiz 4', value: 76 },
-  { label: 'Quiz 5', value: 88 },
-];
-
-const TOPICS: TopicMastery[] = [
-  { topic: 'Life Processes', percentage: 88 },
-  { topic: 'Cells', percentage: 74 },
-  { topic: 'Motion', percentage: 62 },
-];
-
-const RECENT_QUIZZES = [
-  { name: 'Photosynthesis', class: '8-A', questions: 20, avg: '76%' },
-  { name: 'Cell Structure', class: '8-A', questions: 15, avg: '82%' },
-  { name: 'Motion Basics', class: '8-B', questions: 18, avg: '71%' },
-];
-
-const TOP_STUDENTS = [
-  { rank: 1, name: 'Aarav S.', score: '98%' },
-  { rank: 2, name: 'Priya M.', score: '94%' },
-  { rank: 3, name: 'Rohan K.', score: '91%' },
-];
+import { fetchTeacherDashboard, type TeacherDashboardData } from '@/api/dashboard.api';
+import { logApiError } from '@/api/client';
+import { useAuthStore } from '@/store/authStore';
+import { useSchoolFilterStore } from '@/store/schoolFilterStore';
+import { formatQuizActivityAt } from '@/utils/quizMeta';
 
 export function TeacherDashboard() {
+  const [data, setData] = useState<TeacherDashboardData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const filterVersion = useSchoolFilterStore((s) => s.filterVersion);
+  const filterLabel = useSchoolFilterStore((s) => s.getFilterLabel());
+  const isSuperAdmin = useAuthStore((s) => s.user?.role === 'SUPER_ADMIN');
+
+  const loadDashboard = () => {
+    setIsLoading(true);
+    fetchTeacherDashboard()
+      .then(setData)
+      .catch((err) => logApiError('Load teacher dashboard failed', err))
+      .finally(() => setIsLoading(false));
+  };
+
+  useEffect(() => {
+    loadDashboard();
+  }, [filterVersion]);
+
+  const stats = data
+    ? [
+        { label: 'Students', value: String(data.stats.totalStudents) },
+        { label: 'Published quizzes', value: String(data.stats.quizzesConducted) },
+        { label: 'Avg accuracy', value: `${data.stats.avgAccuracy}%` },
+        { label: 'Top score', value: data.stats.topScore },
+      ]
+    : [];
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-ink">Dashboard</h1>
-          <p className="text-muted">Class 8-A · Science · This term</p>
+          <p className="text-muted">
+            {isSuperAdmin
+              ? `Platform overview · ${filterLabel}`
+              : 'Overview of your school tenant'}
+          </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <select className="rounded-xl border border-gray-200 px-3 py-2 text-sm">
-            <option>Class 8-A</option>
-            <option>Class 8-B</option>
-          </select>
-          <select className="rounded-xl border border-gray-200 px-3 py-2 text-sm">
-            <option>Science</option>
-          </select>
-          <Button variant="outline" size="sm">
-            <Download className="h-4 w-4" /> Export
-          </Button>
+        <Button variant="outline" size="sm" onClick={loadDashboard} disabled={isLoading}>
+          <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
+      </div>
+
+      {isLoading && !data ? (
+        <div className="flex min-h-[20vh] items-center justify-center">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {STATS.map((s) => (
-          <Card key={s.label} className="!p-4">
-            <p className="text-sm text-muted">{s.label}</p>
-            <p className="mt-1 text-2xl font-bold text-ink">{s.value}</p>
-          </Card>
-        ))}
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardTitle>Class performance</CardTitle>
-          <ClassBarChart data={QUIZ_PERFORMANCE} />
-        </Card>
-        <Card>
-          <CardTitle>Topic-wise performance</CardTitle>
-          <TopicDonutChart data={TOPICS} />
-        </Card>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardTitle>Recent quizzes</CardTitle>
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="text-muted">
-                <tr>
-                  <th className="pb-2">Quiz</th>
-                  <th className="pb-2">Class</th>
-                  <th className="pb-2">Qs</th>
-                  <th className="pb-2">Avg</th>
-                  <th className="pb-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {RECENT_QUIZZES.map((q) => (
-                  <tr key={q.name} className="border-t border-gray-100">
-                    <td className="py-2.5 font-medium">{q.name}</td>
-                    <td className="py-2.5">{q.class}</td>
-                    <td className="py-2.5">{q.questions}</td>
-                    <td className="py-2.5">{q.avg}</td>
-                    <td className="py-2.5 text-right text-primary">View</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-
-        <Card>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5" /> Top students
-          </CardTitle>
-          <ul className="mt-4 space-y-3">
-            {TOP_STUDENTS.map((s) => (
-              <li
-                key={s.rank}
-                className="flex items-center justify-between rounded-xl bg-surface px-4 py-3"
-              >
-                <span className="font-medium">
-                  #{s.rank} {s.name}
-                </span>
-                <span className="text-primary">{s.score}</span>
-              </li>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {stats.map((s) => (
+              <Card key={s.label} className="!p-4">
+                <p className="text-sm text-muted">{s.label}</p>
+                <p className="mt-1 text-2xl font-bold text-ink">{s.value}</p>
+              </Card>
             ))}
-          </ul>
-        </Card>
-      </div>
+          </div>
 
-      <div>
-        <h2 className="mb-4 text-lg font-semibold">Quiz creator</h2>
-        <QuizCreatorForm />
-      </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Link to="/teacher/quizzes">
+              <Card className="flex h-full items-center justify-between transition hover:border-primary/30 hover:shadow-md">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <BookOpen className="h-5 w-5 text-primary" />
+                    Quizzes
+                  </CardTitle>
+                  <p className="mt-1 text-sm text-muted">
+                    Create quizzes, add manual & AI questions, publish to class
+                  </p>
+                </div>
+                <ChevronRight className="h-5 w-5 shrink-0 text-muted" />
+              </Card>
+            </Link>
+            <Link to="/teacher/analytics">
+              <Card className="flex h-full items-center justify-between transition hover:border-primary/30 hover:shadow-md">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <BarChart3 className="h-5 w-5 text-primary" />
+                    Analytics
+                  </CardTitle>
+                  <p className="mt-1 text-sm text-muted">
+                    Topic mastery, quiz trends, and top student rankings
+                  </p>
+                </div>
+                <ChevronRight className="h-5 w-5 shrink-0 text-muted" />
+              </Card>
+            </Link>
+          </div>
+
+          <Card>
+            <CardTitle>Recent activity</CardTitle>
+            <ul className="mt-3 space-y-2 text-sm">
+              {(data?.recentQuizzes ?? []).slice(0, 5).map((q) => (
+                <li
+                  key={q.id}
+                  className="flex flex-wrap items-start justify-between gap-2 rounded-lg bg-surface px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-ink">
+                      {q.title}{' '}
+                      <span className="font-normal text-muted">({q.status.toLowerCase()})</span>
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted">
+                      {q.status === 'PUBLISHED' ? 'Published' : 'Updated'}{' '}
+                      {formatQuizActivityAt(q)}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-muted">{q.questionCount ?? 0} Qs</span>
+                </li>
+              ))}
+              {!data?.recentQuizzes?.length && (
+                <li className="text-muted">No quizzes yet — open Quizzes to create one.</li>
+              )}
+            </ul>
+          </Card>
+        </>
+      )}
     </div>
   );
 }

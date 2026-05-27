@@ -20,6 +20,7 @@ export class CreateManualQuestionDto {
   @ArrayMinSize(4)
   @ArrayMaxSize(4)
   @IsString({ each: true })
+  @MinLength(1, { each: true })
   options: string[];
 
   @IsInt()

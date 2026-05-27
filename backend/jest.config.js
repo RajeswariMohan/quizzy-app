@@ -9,6 +9,7 @@ module.exports = {
   collectCoverageFrom: ['src/**/*.(t|j)s', '!src/main.ts'],
   coverageDirectory: './coverage',
   testEnvironment: 'node',
+  watchman: false,
   moduleNameMapper: {
     '^@database/(.*)$': '<rootDir>/database/$1',
   },

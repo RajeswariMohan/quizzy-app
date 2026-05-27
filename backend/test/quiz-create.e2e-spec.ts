@@ -46,4 +46,80 @@ describe('Quiz creation (e2e)', () => {
     expect(fetched.body.title).toBe(title);
     expect(fetched.body.questionCount).toBe(0);
   });
+
+  it('POST /api/quizzes resolves class from grade when classId omitted', async () => {
+    const title = `Grade quiz ${Date.now()}`;
+
+    const res = await request(app.getHttpServer())
+      .post('/api/quizzes')
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({
+        title,
+        subject: 'Science',
+        topic: 'Cells',
+        board: 'CBSE',
+        grade: 'Class 8',
+      })
+      .expect(201);
+
+    expect(res.body.schoolId).toBe(SCHOOL_ID);
+    expect(res.body.classId).toBeTruthy();
+    expect(res.body.grade).toBe('Class 8');
+    expect(res.body.status).toBe('DRAFT');
+
+    const list = await request(app.getHttpServer())
+      .get('/api/quizzes')
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .expect(200);
+
+    const created = list.body.find((q: { id: string }) => q.id === res.body.id);
+    expect(created?.grade).toBe('Class 8');
+    expect(created?.board).toBe('CBSE');
+  });
+
+  it('PATCH /api/quizzes/:id updates metadata', async () => {
+    const createRes = await request(app.getHttpServer())
+      .post('/api/quizzes')
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({
+        classId: TEST_CLASS_ID,
+        title: `Update target ${Date.now()}`,
+        subject: 'Science',
+        topic: 'Plants',
+      })
+      .expect(201);
+
+    const quizId = createRes.body.id as string;
+
+    const patchRes = await request(app.getHttpServer())
+      .patch(`/api/quizzes/${quizId}`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ title: 'Updated title', topic: 'Trees' })
+      .expect(200);
+
+    expect(patchRes.body.title).toBe('Updated title');
+    expect(patchRes.body.topic).toBe('Trees');
+  });
+
+  it('PATCH unpublish then publish round-trips published quiz', async () => {
+    const unpublishRes = await request(app.getHttpServer())
+      .patch(`/api/quizzes/${TEST_QUIZ_ID}/unpublish`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .expect(200);
+
+    expect(unpublishRes.body.status).toBe('DRAFT');
+    expect(unpublishRes.body.publishedAt).toBeNull();
+
+    const publishRes = await request(app.getHttpServer())
+      .patch(`/api/quizzes/${TEST_QUIZ_ID}/publish`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({
+        audienceScope: 'GRADE_SECTION',
+        targets: [{ grade: 'Class 5', section: 'A' }],
+      })
+      .expect(200);
+
+    expect(publishRes.body.status).toBe('PUBLISHED');
+    expect(publishRes.body.publishedAt).toBeTruthy();
+  });
 });

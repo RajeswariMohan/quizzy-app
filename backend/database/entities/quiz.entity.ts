@@ -9,6 +9,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { QuizAudienceScope } from '../enums/quiz-audience-scope.enum';
 import { QuizStatus } from '../enums/quiz-status.enum';
 import { Class } from './class.entity';
 import { Question } from './question.entity';
@@ -62,6 +63,17 @@ export class Quiz {
 
   @Column({ name: 'published_at', type: 'timestamptz', nullable: true })
   publishedAt: Date | null;
+
+  @Column({
+    name: 'audience_scope',
+    type: 'varchar',
+    length: 20,
+    default: QuizAudienceScope.SCHOOL,
+  })
+  audienceScope: QuizAudienceScope;
+
+  @Column({ name: 'audience_targets', type: 'jsonb', default: () => "'[]'" })
+  audienceTargets: { grade: string; section: string }[];
 
   @Column({ name: 'starts_at', type: 'timestamptz', nullable: true })
   startsAt: Date | null;

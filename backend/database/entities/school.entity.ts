@@ -41,6 +41,36 @@ export class School {
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive: boolean;
 
+  /** Null means no cap enforced */
+  @Column({ name: 'max_students', type: 'int', nullable: true })
+  maxStudents: number | null;
+
+  @Column({ name: 'max_teachers', type: 'int', nullable: true })
+  maxTeachers: number | null;
+
+  @Column({ name: 'max_parents', type: 'int', nullable: true })
+  maxParents: number | null;
+
+  /** Allowed grade/standard labels for student onboarding (school-configurable). */
+  @Column({ name: 'grade_options', type: 'jsonb', default: () => "'[]'" })
+  gradeOptions: string[];
+
+  /** Allowed section labels e.g. A, B, C, D (school-configurable). */
+  @Column({
+    name: 'section_options',
+    type: 'jsonb',
+    default: () => '\'["A","B","C","D"]\'',
+  })
+  sectionOptions: string[];
+
+  /** Allowed subjects for quizzes and student profiles (school-configurable). */
+  @Column({
+    name: 'subject_options',
+    type: 'jsonb',
+    default: () => "'[]'",
+  })
+  subjectOptions: string[];
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

@@ -47,6 +47,14 @@ export class User {
   @Column({ name: 'avatar_url', type: 'text', nullable: true })
   avatarUrl: string | null;
 
+  /** Grade/standard for students (matches school grade_options). */
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  grade: string | null;
+
+  /** Class section for students (matches school section_options). */
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  section: string | null;
+
   @Column({ name: 'xp_points', type: 'int', default: 0 })
   xpPoints: number;
 

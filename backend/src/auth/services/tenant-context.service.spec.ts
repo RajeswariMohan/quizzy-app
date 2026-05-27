@@ -1,4 +1,5 @@
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { User } from '@database/entities/user.entity';
@@ -10,7 +11,9 @@ import { SCHOOL_ID, TEACHER_ID } from '../../../test/helpers/constants';
 
 describe('TenantContextService', () => {
   let service: TenantContextService;
-  let findOne: jest.Mock;
+  let findUser: jest.Mock;
+  let findSchool: jest.Mock;
+  let findSchools: jest.Mock;
 
   const activeSchool: Partial<School> = {
     id: SCHOOL_ID,
@@ -27,14 +30,28 @@ describe('TenantContextService', () => {
   };
 
   beforeEach(async () => {
-    findOne = jest.fn();
+    findUser = jest.fn();
+    findSchool = jest.fn().mockResolvedValue(activeSchool);
+    findSchools = jest.fn().mockResolvedValue([{ id: SCHOOL_ID }]);
 
     const module = await Test.createTestingModule({
       providers: [
         TenantContextService,
         {
           provide: getRepositoryToken(User),
-          useValue: { findOne },
+          useValue: { findOne: findUser },
+        },
+        {
+          provide: getRepositoryToken(School),
+          useValue: { findOne: findSchool, find: findSchools },
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key: string) =>
+              key === 'DEFAULT_SCHOOL_ID' ? SCHOOL_ID : undefined,
+            ),
+          },
         },
       ],
     }).compile();
@@ -43,7 +60,7 @@ describe('TenantContextService', () => {
   });
 
   it('builds tenant context when JWT matches user record', async () => {
-    findOne.mockResolvedValue(activeTeacher);
+    findUser.mockResolvedValue(activeTeacher);
 
     const context = await service.buildFromPayload({
       sub: TEACHER_ID,
@@ -53,12 +70,13 @@ describe('TenantContextService', () => {
     });
 
     expect(context.schoolId).toBe(SCHOOL_ID);
+    expect(context.actingSchoolId).toBe(SCHOOL_ID);
     expect(context.isTenantScoped).toBe(true);
     expect(context.isSuperAdmin).toBe(false);
   });
 
   it('rejects mismatched school_id in token', async () => {
-    findOne.mockResolvedValue(activeTeacher);
+    findUser.mockResolvedValue(activeTeacher);
 
     await expect(
       service.buildFromPayload({
@@ -94,7 +112,7 @@ describe('TenantContextService', () => {
     ).toThrow(ForbiddenException);
   });
 
-  it('requires explicit school_id for super admin queries', () => {
+  it('resolves school from actingSchoolId or target for super admin', async () => {
     const context = service.toTenantContext(
       '44444444-4444-4444-4444-444444444444',
       'superadmin@quizzy.platform',
@@ -103,6 +121,35 @@ describe('TenantContextService', () => {
     );
 
     expect(() => service.resolveSchoolIdForQuery(context)).toThrow(ForbiddenException);
+
+    const withActing = await service.applySuperAdminScope(context, undefined, SCHOOL_ID);
+    expect(service.resolveSchoolIdForQuery(withActing)).toBe(SCHOOL_ID);
+    expect(service.resolveSchoolIdsForQuery(withActing)).toEqual([SCHOOL_ID]);
     expect(service.resolveSchoolIdForQuery(context, SCHOOL_ID)).toBe(SCHOOL_ID);
+  });
+
+  it('applyActingSchool uses X-School-Id header when provided', async () => {
+    const context = service.toTenantContext(
+      '44444444-4444-4444-4444-444444444444',
+      'superadmin@quizzy.platform',
+      UserRole.SUPER_ADMIN,
+      null,
+    );
+
+    const enriched = await service.applySuperAdminScope(context, undefined, SCHOOL_ID);
+    expect(enriched.actingSchoolId).toBe(SCHOOL_ID);
+    expect(enriched.querySchoolIds).toEqual([SCHOOL_ID]);
+  });
+
+  it('applySuperAdminScope accepts X-School-Ids all', async () => {
+    const context = service.toTenantContext(
+      '44444444-4444-4444-4444-444444444444',
+      'superadmin@quizzy.platform',
+      UserRole.SUPER_ADMIN,
+      null,
+    );
+
+    const enriched = await service.applySuperAdminScope(context, 'all');
+    expect(enriched.querySchoolIds).toEqual([SCHOOL_ID]);
   });
 });

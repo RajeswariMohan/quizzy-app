@@ -1,12 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Question } from '@database/entities/question.entity';
 import { QuestionSourceType } from '@database/enums/question-source-type.enum';
+import { QuizStatus } from '@database/enums/quiz-status.enum';
 import { Quiz } from '@database/entities/quiz.entity';
 import { TenantContext } from '../auth/interfaces/tenant-context.interface';
 import { TenantContextService } from '../auth/services/tenant-context.service';
 import { CreateManualQuestionDto } from './dto/create-manual-question.dto';
+import { UpdateQuestionDto } from './dto/update-question.dto';
 
 @Injectable()
 export class QuestionService {
@@ -15,6 +17,7 @@ export class QuestionService {
     private readonly questionRepository: Repository<Question>,
     @InjectRepository(Quiz)
     private readonly quizRepository: Repository<Quiz>,
+    private readonly dataSource: DataSource,
     private readonly tenantContextService: TenantContextService,
   ) {}
 
@@ -47,6 +50,107 @@ export class QuestionService {
     return this.questionRepository.save(question);
   }
 
+  async bulkCreateManual(
+    tenant: TenantContext,
+    quizId: string,
+    questions: CreateManualQuestionDto[],
+  ): Promise<{ importedCount: number; questionIds: string[] }> {
+    const schoolId = this.tenantContextService.resolveSchoolIdForQuery(tenant);
+    await this.assertQuizInTenant(schoolId, quizId);
+
+    let orderIndex = await this.questionRepository.count({
+      where: { schoolId, quizId },
+    });
+
+    const saved: Question[] = [];
+    for (const dto of questions) {
+      const question = this.questionRepository.create({
+        schoolId,
+        quizId,
+        questionText: dto.questionText.trim(),
+        options: dto.options.map((o) => o.trim()),
+        correctOptionIndex: dto.correctOptionIndex,
+        explanation: dto.explanation?.trim() ?? null,
+        orderIndex: dto.orderIndex ?? orderIndex,
+        difficulty: dto.difficulty ?? null,
+        points: dto.points ?? 10,
+        sourceType: QuestionSourceType.MANUAL,
+        generatedByUserId: tenant.userId,
+      });
+      saved.push(await this.questionRepository.save(question));
+      orderIndex += 1;
+    }
+
+    return {
+      importedCount: saved.length,
+      questionIds: saved.map((q) => q.id),
+    };
+  }
+
+  async update(
+    tenant: TenantContext,
+    quizId: string,
+    questionId: string,
+    dto: UpdateQuestionDto,
+  ): Promise<Question> {
+    const schoolId = this.tenantContextService.resolveSchoolIdForQuery(tenant);
+    await this.assertDraftQuiz(schoolId, quizId);
+
+    const question = await this.questionRepository.findOne({
+      where: { id: questionId, quizId, schoolId },
+    });
+    if (!question) {
+      throw new NotFoundException('Question not found');
+    }
+
+    question.questionText = dto.questionText.trim();
+    question.options = dto.options.map((o) => o.trim());
+    question.correctOptionIndex = dto.correctOptionIndex;
+    question.explanation = dto.explanation?.trim() ?? null;
+    if (dto.difficulty !== undefined) question.difficulty = dto.difficulty ?? null;
+    if (dto.points !== undefined) question.points = dto.points;
+
+    return this.questionRepository.save(question);
+  }
+
+  async remove(
+    tenant: TenantContext,
+    quizId: string,
+    questionId: string,
+  ): Promise<{ deleted: true; remainingCount: number }> {
+    const schoolId = this.tenantContextService.resolveSchoolIdForQuery(tenant);
+    await this.assertDraftQuiz(schoolId, quizId);
+
+    const question = await this.questionRepository.findOne({
+      where: { id: questionId, quizId, schoolId },
+    });
+    if (!question) {
+      throw new NotFoundException('Question not found');
+    }
+
+    await this.dataSource.transaction(async (manager) => {
+      await manager.delete(Question, { id: questionId, quizId, schoolId });
+
+      const remaining = await manager.find(Question, {
+        where: { schoolId, quizId },
+        order: { orderIndex: 'ASC' },
+      });
+
+      for (let i = 0; i < remaining.length; i++) {
+        if (remaining[i].orderIndex !== i) {
+          remaining[i].orderIndex = i;
+          await manager.save(remaining[i]);
+        }
+      }
+    });
+
+    const remainingCount = await this.questionRepository.count({
+      where: { schoolId, quizId },
+    });
+
+    return { deleted: true, remainingCount };
+  }
+
   async listByQuiz(tenant: TenantContext, quizId: string): Promise<Question[]> {
     const schoolId = this.tenantContextService.resolveSchoolIdForQuery(tenant);
     await this.assertQuizInTenant(schoolId, quizId);
@@ -62,5 +166,18 @@ export class QuestionService {
     if (!quiz) {
       throw new NotFoundException('Quiz not found');
     }
+  }
+
+  private async assertDraftQuiz(schoolId: string, quizId: string): Promise<Quiz> {
+    const quiz = await this.quizRepository.findOne({ where: { id: quizId, schoolId } });
+    if (!quiz) {
+      throw new NotFoundException('Quiz not found');
+    }
+    if (quiz.status !== QuizStatus.DRAFT) {
+      throw new BadRequestException(
+        'Quiz must be unpublished (draft) before editing questions',
+      );
+    }
+    return quiz;
   }
 }
