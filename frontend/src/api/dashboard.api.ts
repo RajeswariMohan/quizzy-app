@@ -20,6 +20,12 @@ export interface AnalyticsFilterOptions {
   subjects: string[];
   boards: string[];
   topics: string[];
+  links?: Array<{
+    grade: string;
+    subject: string;
+    board?: string;
+    topic: string;
+  }>;
   creators?: AnalyticsCreatorOption[];
 }
 
@@ -53,6 +59,12 @@ export interface TeacherDashboardData {
     topScore: string;
   };
   recentQuizzes: (QuizSummary & {
+    className: string | null;
+    avgAccuracy: number | null;
+    publishedAt?: string | null;
+  })[];
+  /** Full quiz list for the performance summary table (untruncated). */
+  quizSummaryList: (QuizSummary & {
     className: string | null;
     avgAccuracy: number | null;
     publishedAt?: string | null;

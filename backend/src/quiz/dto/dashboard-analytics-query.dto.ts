@@ -1,6 +1,13 @@
+import { Transform } from 'class-transformer';
 import { IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class DashboardAnalyticsQueryDto {
+  @Transform(({ value }) => {
+    if (typeof value !== 'string') return value;
+    const normalized = value.trim();
+    if (!normalized || normalized.toLowerCase() === 'all') return undefined;
+    return normalized;
+  })
   @IsOptional()
   @IsUUID()
   createdByUserId?: string;

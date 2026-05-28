@@ -53,7 +53,8 @@ describe('Quiz & Question modules (e2e)', () => {
       .send({
         classId: TEST_CLASS_ID,
         title: `Bulk import ${Date.now()}`,
-        subject: 'Math',
+        subject: 'Science',
+        topic: 'Numbers',
       })
       .expect(201);
 
@@ -100,7 +101,7 @@ describe('Quiz & Question modules (e2e)', () => {
       .send({
         classId: TEST_CLASS_ID,
         title: `Edit questions ${Date.now()}`,
-        subject: 'Math',
+        subject: 'Mathematics',
         topic: 'Addition',
       })
       .expect(201);

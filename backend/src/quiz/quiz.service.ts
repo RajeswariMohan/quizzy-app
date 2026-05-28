@@ -250,7 +250,11 @@ export class QuizService {
     filters: DashboardAnalyticsQueryDto = {},
   ) {
     const schoolIds = this.tenantContextService.resolveSchoolIdsForQuery(tenant);
-    const filterOptions = await this.loadAnalyticsFilterOptions(schoolIds);
+    const creatorRoles = this.resolveCreatorRolesForViewer(tenant);
+    const filterOptions = await this.loadAnalyticsFilterOptions(
+      schoolIds,
+      creatorRoles,
+    );
     const hasFilters = this.hasAnalyticsFilters(filters);
 
     let totalStudents: number;
@@ -361,7 +365,11 @@ export class QuizService {
 
     const topicRows = await topicQb.getRawMany<{ topic: string; percentage: string }>();
 
-    const creatorPerformance = await this.loadCreatorPerformance(schoolIds, filters);
+    const creatorPerformance = await this.loadCreatorPerformance(
+      schoolIds,
+      filters,
+      creatorRoles,
+    );
 
     return {
       schoolFilter: {
@@ -382,6 +390,7 @@ export class QuizService {
         avgAccuracy: Number(avgRow?.avgAccuracy ?? 0),
         topScore: topScoreRow ? `${topScoreRow.score}%` : '—',
       },
+      quizSummaryList: recentQuizzes,
       recentQuizzes: recentQuizzes.slice(0, 8),
       topStudents: topWithScores,
       quizPerformance,
@@ -555,6 +564,7 @@ export class QuizService {
   private async loadCreatorPerformance(
     schoolIds: string[],
     filters: DashboardAnalyticsQueryDto,
+    creatorRoles: UserRole[],
   ) {
     const qb = this.quizRepository
       .createQueryBuilder('q')
@@ -581,7 +591,7 @@ export class QuizService {
       )
       .where('q.school_id IN (:...schoolIds)', { schoolIds })
       .andWhere('creator.role IN (:...creatorRoles)', {
-        creatorRoles: [UserRole.TEACHER, UserRole.SCHOOL_ADMIN, UserRole.SUPER_ADMIN],
+        creatorRoles,
       })
       .setParameter('published', QuizStatus.PUBLISHED)
       .groupBy(
@@ -610,12 +620,15 @@ export class QuizService {
     }));
   }
 
-  private async loadAnalyticsFilterOptions(schoolIds: string[]) {
+  private async loadAnalyticsFilterOptions(
+    schoolIds: string[],
+    creatorRoles: UserRole[],
+  ) {
     const base = this.quizRepository
       .createQueryBuilder('q')
       .where('q.school_id IN (:...schoolIds)', { schoolIds });
 
-    const [grades, subjects, boards, topics] = await Promise.all([
+    const [grades, subjects, boards, topics, links] = await Promise.all([
       base
         .clone()
         .select('DISTINCT q.grade', 'value')
@@ -640,6 +653,25 @@ export class QuizService {
         .andWhere('q.topic IS NOT NULL')
         .orderBy('q.topic', 'ASC')
         .getRawMany<{ value: string }>(),
+      base
+        .clone()
+        .select('q.grade', 'grade')
+        .addSelect('q.subject', 'subject')
+        .addSelect('q.board', 'board')
+        .addSelect('q.topic', 'topic')
+        .andWhere('q.grade IS NOT NULL')
+        .andWhere('q.subject IS NOT NULL')
+        .andWhere('q.topic IS NOT NULL')
+        .distinct(true)
+        .orderBy('q.grade', 'ASC')
+        .addOrderBy('q.subject', 'ASC')
+        .addOrderBy('q.topic', 'ASC')
+        .getRawMany<{
+          grade: string;
+          subject: string;
+          board: string | null;
+          topic: string;
+        }>(),
     ]);
 
     const creators = await this.quizRepository
@@ -653,7 +685,7 @@ export class QuizService {
       .addSelect('u.role', 'role')
       .where('q.school_id IN (:...schoolIds)', { schoolIds })
       .andWhere('u.role IN (:...creatorRoles)', {
-        creatorRoles: [UserRole.TEACHER, UserRole.SCHOOL_ADMIN, UserRole.SUPER_ADMIN],
+        creatorRoles,
       })
       .groupBy('u.id, u.display_name, u.first_name, u.last_name, u.email, u.role')
       .orderBy('creator_display_name', 'ASC')
@@ -664,12 +696,24 @@ export class QuizService {
       subjects: subjects.map((r) => r.value),
       boards: boards.map((r) => r.value),
       topics: topics.map((r) => r.value),
+      links: links.map((l) => ({
+        grade: l.grade,
+        subject: l.subject,
+        board: l.board ?? undefined,
+        topic: l.topic,
+      })),
       creators: creators.map((c) => ({
         userId: c.userId,
         displayName: c.creator_display_name,
         role: c.role,
       })),
     };
+  }
+
+  private resolveCreatorRolesForViewer(tenant: TenantContext): UserRole[] {
+    return tenant.role === UserRole.SUPER_ADMIN
+      ? [UserRole.TEACHER, UserRole.SCHOOL_ADMIN, UserRole.SUPER_ADMIN]
+      : [UserRole.TEACHER, UserRole.SCHOOL_ADMIN];
   }
 
   private async assertClassInTenant(schoolId: string, classId: string): Promise<void> {

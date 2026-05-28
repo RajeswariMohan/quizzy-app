@@ -27,9 +27,12 @@ export class EngagementService {
 
   async getOverview(tenant: TenantContext, query: EngagementQueryDto) {
     const schoolIds = this.resolveSchoolIds(tenant);
+    const visibleRoles = this.resolveVisibleRoles(tenant);
     const days = query.days ?? 30;
     const since = new Date();
     since.setDate(since.getDate() - days);
+    const requestedRole =
+      query.role && visibleRoles.includes(query.role) ? query.role : undefined;
 
     const qb = this.sessionsRepository
       .createQueryBuilder('s')
@@ -40,7 +43,7 @@ export class EngagementService {
       .addSelect('COALESCE(SUM(s.active_seconds), 0)', 'totalActiveSeconds')
       .addSelect('COALESCE(AVG(s.active_seconds), 0)', 'avgSessionSeconds')
       .where('s.started_at >= :since', { since })
-      .andWhere('u.role IN (:...roles)', { roles: TRACKED_ROLES });
+      .andWhere('u.role IN (:...roles)', { roles: visibleRoles });
 
     if (schoolIds !== null) {
       if (schoolIds.length === 0) {
@@ -49,8 +52,18 @@ export class EngagementService {
       qb.andWhere('s.school_id IN (:...schoolIds)', { schoolIds });
     }
 
-    if (query.role) {
-      qb.andWhere('u.role = :role', { role: query.role });
+    if (requestedRole) {
+      qb.andWhere('u.role = :role', { role: requestedRole });
+    }
+
+    if (tenant.role === UserRole.TEACHER) {
+      qb.andWhere(
+        '(u.role <> :teacherRole OR u.id = :teacherUserId)',
+        {
+          teacherRole: UserRole.TEACHER,
+          teacherUserId: tenant.userId,
+        },
+      );
     }
 
     const byRole = await qb.groupBy('u.role').orderBy('u.role', 'ASC').getRawMany<{
@@ -61,9 +74,22 @@ export class EngagementService {
       avgSessionSeconds: string;
     }>();
 
-    const users = await this.loadUserEngagementRows(schoolIds, since, query);
+    const users = await this.loadUserEngagementRows(
+      tenant,
+      schoolIds,
+      since,
+      requestedRole,
+      visibleRoles,
+      query.search,
+    );
 
-    const dailyTrend = await this.loadDailyTrend(schoolIds, since, query.role);
+    const dailyTrend = await this.loadDailyTrend(
+      tenant,
+      schoolIds,
+      since,
+      requestedRole,
+      visibleRoles,
+    );
 
     return {
       days,
@@ -108,9 +134,12 @@ export class EngagementService {
   }
 
   private async loadUserEngagementRows(
+    tenant: TenantContext,
     schoolIds: string[] | null,
     since: Date,
-    query: EngagementQueryDto,
+    requestedRole: UserRole | undefined,
+    visibleRoles: UserRole[],
+    search: string | undefined,
   ) {
     const qb = this.usersRepository
       .createQueryBuilder('u')
@@ -132,19 +161,29 @@ export class EngagementService {
       .addSelect('COUNT(s.id)', 'sessionCount')
       .addSelect('MAX(s.started_at)', 'lastLoginAt')
       .where('u.is_active = true')
-      .andWhere('u.role IN (:...roles)', { roles: TRACKED_ROLES });
+      .andWhere('u.role IN (:...roles)', { roles: visibleRoles });
 
     if (schoolIds !== null) {
       if (schoolIds.length === 0) return [];
       qb.andWhere('u.school_id IN (:...schoolIds)', { schoolIds });
     }
 
-    if (query.role) {
-      qb.andWhere('u.role = :role', { role: query.role });
+    if (requestedRole) {
+      qb.andWhere('u.role = :role', { role: requestedRole });
     }
 
-    if (query.search?.trim()) {
-      const term = `%${query.search.trim().toLowerCase()}%`;
+    if (tenant.role === UserRole.TEACHER) {
+      qb.andWhere(
+        '(u.role <> :teacherRole OR u.id = :teacherUserId)',
+        {
+          teacherRole: UserRole.TEACHER,
+          teacherUserId: tenant.userId,
+        },
+      );
+    }
+
+    if (search?.trim()) {
+      const term = `%${search.trim().toLowerCase()}%`;
       qb.andWhere(
         `(LOWER(u.email) LIKE :term OR LOWER(u.first_name) LIKE :term OR LOWER(u.last_name) LIKE :term OR LOWER(COALESCE(u.display_name, '')) LIKE :term)`,
         { term },
@@ -193,9 +232,11 @@ export class EngagementService {
   }
 
   private async loadDailyTrend(
+    tenant: TenantContext,
     schoolIds: string[] | null,
     since: Date,
-    role?: UserRole,
+    requestedRole: UserRole | undefined,
+    visibleRoles: UserRole[],
   ) {
     const qb = this.sessionsRepository
       .createQueryBuilder('s')
@@ -204,7 +245,7 @@ export class EngagementService {
       .addSelect('COALESCE(SUM(s.active_seconds), 0)', 'activeSeconds')
       .addSelect('COUNT(DISTINCT s.user_id)', 'activeUsers')
       .where('s.started_at >= :since', { since })
-      .andWhere('u.role IN (:...roles)', { roles: TRACKED_ROLES });
+      .andWhere('u.role IN (:...roles)', { roles: visibleRoles });
 
     if (schoolIds !== null && schoolIds.length > 0) {
       qb.andWhere('s.school_id IN (:...schoolIds)', { schoolIds });
@@ -212,8 +253,18 @@ export class EngagementService {
       return [];
     }
 
-    if (role) {
-      qb.andWhere('u.role = :role', { role });
+    if (requestedRole) {
+      qb.andWhere('u.role = :role', { role: requestedRole });
+    }
+
+    if (tenant.role === UserRole.TEACHER) {
+      qb.andWhere(
+        '(u.role <> :teacherRole OR u.id = :teacherUserId)',
+        {
+          teacherRole: UserRole.TEACHER,
+          teacherUserId: tenant.userId,
+        },
+      );
     }
 
     const rows = await qb
@@ -238,5 +289,12 @@ export class EngagementService {
       throw new ForbiddenException('School context required');
     }
     return [schoolId];
+  }
+
+  private resolveVisibleRoles(tenant: TenantContext): UserRole[] {
+    if (tenant.role === UserRole.TEACHER) {
+      return [UserRole.STUDENT, UserRole.PARENT, UserRole.TEACHER];
+    }
+    return TRACKED_ROLES;
   }
 }

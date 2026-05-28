@@ -19,22 +19,25 @@ import {
 import { getApiErrorMessage, logApiError } from '@/api/client';
 import { formatActiveTime, formatDateTime } from '@/lib/formatDateTime';
 import { useSchoolFilterStore } from '@/store/schoolFilterStore';
+import { useAuthStore } from '@/store/authStore';
 import type { UserRole } from '@/types/auth';
+import { useClientPagination } from '@/hooks/useClientPagination';
+import { TablePagination } from '@/components/ui/TablePagination';
 
 const ROLE_LABELS: Record<string, string> = {
   STUDENT: 'Students',
-  PARENT: 'Parents',
   TEACHER: 'Teachers',
   SCHOOL_ADMIN: 'School admins',
 };
 
-const ALL_ROLES: UserRole[] = ['STUDENT', 'PARENT', 'TEACHER', 'SCHOOL_ADMIN'];
+const ALL_ROLES: UserRole[] = ['STUDENT', 'TEACHER', 'SCHOOL_ADMIN'];
 
 interface EngagementPanelProps {
   defaultDays?: number;
 }
 
 export function EngagementPanel({ defaultDays = 30 }: EngagementPanelProps) {
+  const viewerRole = useAuthStore((s) => s.user?.role);
   const [data, setData] = useState<EngagementOverview | null>(null);
   const [filters, setFilters] = useState<EngagementQuery>({ days: defaultDays });
   const [isLoading, setIsLoading] = useState(true);
@@ -58,12 +61,31 @@ export function EngagementPanel({ defaultDays = 30 }: EngagementPanelProps) {
     load();
   }, [load]);
 
-  const totalSeconds =
-    data?.byRole.reduce((sum, row) => sum + row.totalActiveSeconds, 0) ?? 0;
+  const allowedRoles = useMemo<UserRole[]>(() => {
+    if (viewerRole === 'TEACHER') {
+      return ['STUDENT', 'TEACHER'];
+    }
+    return ALL_ROLES;
+  }, [viewerRole]);
+
+  const visibleByRole = useMemo(
+    () => (data?.byRole ?? []).filter((row) => allowedRoles.includes(row.role)),
+    [data?.byRole, allowedRoles],
+  );
+
+  const visibleUsers = useMemo(
+    () => (data?.users ?? []).filter((row) => allowedRoles.includes(row.role)),
+    [data?.users, allowedRoles],
+  );
+
+  const totalSeconds = visibleByRole.reduce((sum, row) => sum + row.totalActiveSeconds, 0);
 
   const roleCards = useMemo(() => {
-    const byRoleMap = new Map(data?.byRole.map((r) => [r.role, r]) ?? []);
-    const roles = filters.role ? [filters.role] : ALL_ROLES;
+    const byRoleMap = new Map(visibleByRole.map((r) => [r.role, r]));
+    const roles =
+      filters.role && allowedRoles.includes(filters.role)
+        ? [filters.role]
+        : allowedRoles;
     return roles.map((role) => {
       const row = byRoleMap.get(role);
       return {
@@ -75,7 +97,7 @@ export function EngagementPanel({ defaultDays = 30 }: EngagementPanelProps) {
         avgSessionSeconds: row?.avgSessionSeconds ?? 0,
       };
     });
-  }, [data?.byRole, filters.role]);
+  }, [visibleByRole, filters.role, allowedRoles]);
 
   const trendChartData = useMemo(
     () =>
@@ -86,7 +108,11 @@ export function EngagementPanel({ defaultDays = 30 }: EngagementPanelProps) {
     [data?.dailyTrend],
   );
 
-  const hasSessionData = totalSeconds > 0 || (data?.users.length ?? 0) > 0;
+  const hasSessionData = totalSeconds > 0 || visibleUsers.length > 0;
+
+  const usersPagination = useClientPagination(visibleUsers, {
+    resetKey: `${filters.days ?? defaultDays}|${filters.role ?? ''}|${visibleUsers.length}`,
+  });
 
   return (
     <div className="space-y-4">
@@ -94,7 +120,7 @@ export function EngagementPanel({ defaultDays = 30 }: EngagementPanelProps) {
         <div>
           <h2 className="text-lg font-semibold text-ink">Engagement (session time)</h2>
           <p className="text-sm text-muted">
-            Active portal time for students, parents, teachers, and school admins
+            Active portal time for role-relevant users in your scope
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -122,9 +148,10 @@ export function EngagementPanel({ defaultDays = 30 }: EngagementPanelProps) {
           >
             <option value="">All roles</option>
             <option value="STUDENT">Students</option>
-            <option value="PARENT">Parents</option>
             <option value="TEACHER">Teachers</option>
-            <option value="SCHOOL_ADMIN">School admins</option>
+            {allowedRoles.includes('SCHOOL_ADMIN') && (
+              <option value="SCHOOL_ADMIN">School admins</option>
+            )}
           </select>
           <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -205,7 +232,7 @@ export function EngagementPanel({ defaultDays = 30 }: EngagementPanelProps) {
             </Card>
           )}
 
-          {data && data.users.length > 0 && (
+          {data && visibleUsers.length > 0 && (
             <Card className="overflow-hidden !p-0">
               <div className="border-b border-gray-100 px-4 py-3">
                 <CardTitle className="flex items-center gap-2">
@@ -225,7 +252,7 @@ export function EngagementPanel({ defaultDays = 30 }: EngagementPanelProps) {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.users.map((u) => (
+                    {usersPagination.pageItems.map((u) => (
                       <tr key={u.userId} className="border-b border-gray-50">
                         <td className="px-4 py-3">
                           <p className="font-medium">{u.displayName}</p>
@@ -246,6 +273,18 @@ export function EngagementPanel({ defaultDays = 30 }: EngagementPanelProps) {
                   </tbody>
                 </table>
               </div>
+              {usersPagination.showPagination && (
+                <TablePagination
+                  page={usersPagination.page}
+                  totalPages={usersPagination.totalPages}
+                  pageSize={usersPagination.pageSize}
+                  totalItems={usersPagination.totalItems}
+                  rangeStart={usersPagination.rangeStart}
+                  rangeEnd={usersPagination.rangeEnd}
+                  onPageChange={usersPagination.setPage}
+                  onPageSizeChange={usersPagination.setPageSize}
+                />
+              )}
             </Card>
           )}
         </>

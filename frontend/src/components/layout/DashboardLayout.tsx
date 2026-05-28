@@ -118,17 +118,12 @@ const NAV_ITEMS: NavItem[] = [
     icon: ClipboardList,
     roles: ['SUPER_ADMIN'],
   },
-  {
-    to: '/profile',
-    label: 'Profile',
-    icon: User,
-    roles: ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'TEACHER', 'STUDENT', 'PARENT'],
-  },
 ];
 
 export function DashboardLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const { user, logout } = useAuthStore();
   const { tenantProfile } = useTenantTheme();
   const navigate = useNavigate();
@@ -143,11 +138,11 @@ export function DashboardLayout() {
   };
 
   return (
-    <div className="flex min-h-screen bg-surface">
+    <div className="flex h-screen overflow-hidden bg-surface">
       {/* Sidebar — desktop */}
       <aside
         className={cn(
-          'sticky top-0 hidden h-screen max-h-screen shrink-0 flex-col border-r border-gray-200 bg-ink text-white transition-all duration-300 lg:flex',
+          'hidden h-full shrink-0 flex-col border-r border-gray-200 bg-ink text-white transition-all duration-300 lg:flex',
           collapsed ? 'w-[72px]' : 'w-64',
         )}
       >
@@ -257,9 +252,9 @@ export function DashboardLayout() {
         </div>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 flex items-center justify-between border-b border-gray-200 bg-white/90 px-4 py-3 backdrop-blur md:px-6">
+        <header className="relative z-30 flex shrink-0 items-center justify-between border-b border-gray-200 bg-white/90 px-4 py-3 backdrop-blur md:px-6">
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -283,49 +278,95 @@ export function DashboardLayout() {
 
           <div className="flex items-center gap-2 sm:gap-3">
             {user?.role === 'SUPER_ADMIN' && <SuperAdminSchoolFilter />}
-            <button
-              type="button"
-              onClick={() => navigate('/profile')}
-              className="hidden text-right sm:block rounded-lg px-2 py-1 hover:bg-gray-100"
-            >
-              <p className="text-sm font-medium">{user?.displayName ?? user?.email}</p>
-              <p className="text-xs text-muted">{user?.role.replace('_', ' ')}</p>
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="flex items-center gap-1.5 rounded-xl px-2.5 py-2 text-sm font-medium text-muted hover:bg-gray-100 hover:text-ink sm:px-3"
-              aria-label="Log out"
-            >
-              <LogOut className="h-4 w-4 shrink-0" />
-              <span className="hidden sm:inline">Logout</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/profile')}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary hover:ring-2 hover:ring-primary/30"
-              title="My profile"
-              aria-label="My profile"
-            >
-              {user?.avatarUrl ? (
-                <img
-                  src={user.avatarUrl}
-                  alt=""
-                  className="h-full w-full rounded-full object-cover"
-                />
-              ) : (
-                (user?.displayName ?? 'U').charAt(0).toUpperCase()
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setProfileMenuOpen((v) => !v)}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary hover:ring-2 hover:ring-primary/30"
+                title="Account menu"
+                aria-label="Account menu"
+                aria-haspopup="menu"
+                aria-expanded={profileMenuOpen}
+              >
+                {user?.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt=""
+                    className="h-full w-full rounded-full object-cover"
+                  />
+                ) : (
+                  (user?.displayName ?? 'U').charAt(0).toUpperCase()
+                )}
+              </button>
+              {profileMenuOpen && (
+                <>
+                  <button
+                    type="button"
+                    className="fixed inset-0 z-10 cursor-default"
+                    aria-label="Close account menu"
+                    onClick={() => setProfileMenuOpen(false)}
+                  />
+                  <div
+                    className="absolute right-0 z-20 mt-2 w-64 rounded-xl border border-gray-200 bg-white p-2 shadow-lg"
+                    role="menu"
+                  >
+                    <div className="border-b border-gray-100 px-2 py-2">
+                      <p className="truncate text-sm font-medium text-ink">
+                        {user?.displayName ?? user?.email}
+                      </p>
+                      <p className="text-xs text-muted">{user?.role.replace('_', ' ')}</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-gray-100"
+                      onClick={() => {
+                        setProfileMenuOpen(false);
+                        navigate('/profile');
+                      }}
+                      role="menuitem"
+                    >
+                      <User className="h-4 w-4" />
+                      My profile
+                    </button>
+                    {settingsPath && (
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-gray-100"
+                        onClick={() => {
+                          setProfileMenuOpen(false);
+                          navigate(settingsPath);
+                        }}
+                        role="menuitem"
+                      >
+                        <Settings className="h-4 w-4" />
+                        Settings
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm text-danger hover:bg-danger/10"
+                      onClick={() => {
+                        setProfileMenuOpen(false);
+                        void handleLogout();
+                      }}
+                      role="menuitem"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Logout
+                    </button>
+                  </div>
+                </>
               )}
-            </button>
+            </div>
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto p-4 md:p-6">
+        <main className="flex-1 min-h-0 overflow-auto p-4 md:p-6">
           <Outlet />
         </main>
 
         {/* Mobile bottom nav */}
-        <nav className="flex border-t border-gray-200 bg-white lg:hidden">
+        <nav className="flex shrink-0 border-t border-gray-200 bg-white lg:hidden">
           {items.slice(0, 4).map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}

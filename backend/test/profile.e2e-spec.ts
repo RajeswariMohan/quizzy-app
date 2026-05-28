@@ -66,7 +66,7 @@ describe('User profile (e2e)', () => {
     await request(app.getHttpServer())
       .post('/api/auth/login')
       .send({ email: 'teacher@test.school', password: 'NewPassword9!' })
-      .expect(200);
+      .expect(201);
 
     await request(app.getHttpServer())
       .patch('/api/me/password')

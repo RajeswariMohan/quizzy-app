@@ -22,6 +22,7 @@ import { getApiErrorMessage, logApiError } from '@/api/client';
 import { useNotificationStore } from '@/store/notificationStore';
 import { useAuthStore } from '@/store/authStore';
 import { useSchoolFilterStore } from '@/store/schoolFilterStore';
+import { PageWithScrollBelowFilter } from '@/components/layout/PageWithScrollBelowFilter';
 import { QuizListFilterBar } from '@/components/quiz/QuizListFilterBar';
 import { formatAudienceLabel } from '@/utils/quizAudience';
 import { formatQuizSubtitle } from '@/utils/quizMeta';
@@ -56,7 +57,6 @@ export function TeacherQuizzesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [publishDialogQuiz, setPublishDialogQuiz] = useState<QuizSummary | null>(null);
-  const [publishingId, setPublishingId] = useState<string | null>(null);
   const [unpublishingId, setUnpublishingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [addingQuestionsId, setAddingQuestionsId] = useState<string | null>(null);
@@ -137,7 +137,6 @@ export function TeacherQuizzesPage() {
   };
 
   const confirmPublish = async (quizId: string, payload: PublishQuizPayload) => {
-    setPublishingId(quizId);
     try {
       const result = await publishQuiz(quizId, payload);
       const audience =
@@ -160,8 +159,6 @@ export function TeacherQuizzesPage() {
         type: 'error',
       });
       throw err;
-    } finally {
-      setPublishingId(null);
     }
   };
 
@@ -197,23 +194,61 @@ export function TeacherQuizzesPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-ink">Quizzes</h1>
-          <p className="text-muted">
-            {isSuperAdmin
-              ? `Manage quizzes · ${filterLabel}`
-              : 'Create, edit, unpublish, and republish quizzes with manual and AI questions'}
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={loadQuizzes} disabled={isLoading}>
-          <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
-      </div>
-
-      <Card className="border-primary/20 bg-primary/5">
+    <>
+      <PageWithScrollBelowFilter
+        header={
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-ink">Quizzes</h1>
+              <p className="text-muted">
+                {isSuperAdmin
+                  ? `Manage quizzes · ${filterLabel}`
+                  : 'Create, edit, unpublish, and republish quizzes with manual and AI questions'}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={loadQuizzes} disabled={isLoading}>
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
+        }
+        filter={
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <BookOpen className="h-5 w-5" />
+                Your quizzes
+              </CardTitle>
+              <div className="flex flex-wrap gap-2">
+                {statusTabs.map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setFilter(key)}
+                    className={`rounded-xl px-3 py-1.5 text-sm font-medium transition ${
+                      filter === key
+                        ? 'bg-primary text-white'
+                        : 'bg-white text-muted hover:text-ink ring-1 ring-gray-200'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {!isLoading && !error && quizzes.length > 0 && (
+              <QuizListFilterBar
+                filters={listFilters}
+                options={filterOptions}
+                resultCount={filtered.length}
+                totalCount={byStatus.length}
+                onChange={setListFilters}
+              />
+            )}
+          </div>
+        }
+      >
+        <Card className="border-primary/20 bg-primary/5">
         <CardTitle className="flex items-center gap-2 text-base">
           <Sparkles className="h-4 w-4 text-primary" />
           Create new quiz
@@ -239,42 +274,7 @@ export function TeacherQuizzesPage() {
         </div>
       </Card>
 
-      <Card>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle className="flex items-center gap-2">
-            <BookOpen className="h-5 w-5" />
-            Your quizzes
-          </CardTitle>
-          <div className="flex flex-wrap gap-2">
-            {statusTabs.map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setFilter(key)}
-                className={`rounded-xl px-3 py-1.5 text-sm font-medium transition ${
-                  filter === key
-                    ? 'bg-primary text-white'
-                    : 'bg-surface text-muted hover:text-ink'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {!isLoading && !error && quizzes.length > 0 && (
-          <div className="mt-4">
-            <QuizListFilterBar
-              filters={listFilters}
-              options={filterOptions}
-              resultCount={filtered.length}
-              totalCount={byStatus.length}
-              onChange={setListFilters}
-            />
-          </div>
-        )}
-
+        <Card>
         {isLoading && (
           <div className="flex justify-center py-12">
             <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
@@ -466,7 +466,8 @@ export function TeacherQuizzesPage() {
             ))}
           </div>
         )}
-      </Card>
+        </Card>
+      </PageWithScrollBelowFilter>
 
       {publishDialogQuiz && (
         <PublishQuizDialog
@@ -475,6 +476,6 @@ export function TeacherQuizzesPage() {
           onConfirm={(payload) => confirmPublish(publishDialogQuiz.id, payload)}
         />
       )}
-    </div>
+    </>
   );
 }

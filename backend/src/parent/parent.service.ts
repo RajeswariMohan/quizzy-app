@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Question } from '@database/entities/question.entity';
 import { Quiz } from '@database/entities/quiz.entity';
 import { StudentResponse } from '@database/entities/student-response.entity';
 import { User } from '@database/entities/user.entity';
@@ -71,6 +72,7 @@ export class ParentService {
       .createQueryBuilder('r')
       .select('COUNT(*)', 'totalAnswers')
       .addSelect('COUNT(DISTINCT r.quiz_id)', 'quizzesTaken')
+      .addSelect('COALESCE(SUM(r.points_earned), 0)', 'pointsEarned')
       .addSelect(
         'ROUND(100.0 * SUM(CASE WHEN r.is_correct THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 0)',
         'accuracy',
@@ -80,8 +82,21 @@ export class ParentService {
       .getRawOne<{
         totalAnswers: string;
         quizzesTaken: string;
+        pointsEarned: string;
         accuracy: string | null;
       }>();
+
+    const pointsAvailableRow = await this.responseRepository
+      .createQueryBuilder('r')
+      .innerJoin(Question, 'q', 'q.id = r.question_id AND q.school_id = r.school_id')
+      .select('COALESCE(SUM(q.points), 0)', 'pointsAvailable')
+      .where('r.student_id = :studentId', { studentId: child.id })
+      .andWhere('r.school_id = :schoolId', { schoolId })
+      .getRawOne<{ pointsAvailable: string }>();
+
+    const xpPerLevel = 500;
+    const level = Math.floor(child.xpPoints / xpPerLevel) + 1;
+    const xpInLevel = child.xpPoints % xpPerLevel;
 
     const recent = await this.responseRepository
       .createQueryBuilder('r')
@@ -106,11 +121,16 @@ export class ParentService {
         displayName,
         xpPoints: child.xpPoints,
         currentStreak: child.currentStreak,
+        level,
+        xpInLevel,
+        xpToNextLevel: xpPerLevel,
       },
       stats: {
         quizzesTaken: Number(stats?.quizzesTaken ?? 0),
         accuracy: Number(stats?.accuracy ?? 0),
         totalAnswers: Number(stats?.totalAnswers ?? 0),
+        pointsEarned: Number(stats?.pointsEarned ?? 0),
+        pointsAvailable: Number(pointsAvailableRow?.pointsAvailable ?? 0),
       },
       recentActivity: recent.map((row, index) => ({
         id: String(index),

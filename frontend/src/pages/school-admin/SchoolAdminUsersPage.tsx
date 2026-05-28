@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { RefreshCw, Pencil, UserX, UserCheck, Trash2 } from 'lucide-react';
+import { FilterPanel } from '@/components/layout/FilterPanel';
+import { PageWithScrollBelowFilter } from '@/components/layout/PageWithScrollBelowFilter';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -23,6 +25,8 @@ import {
   EditSchoolUserDialog,
   isEditableSchoolUser,
 } from '@/components/school-admin/EditSchoolUserDialog';
+import { useClientPagination } from '@/hooks/useClientPagination';
+import { TablePagination } from '@/components/ui/TablePagination';
 
 export function SchoolAdminUsersPage() {
   const [users, setUsers] = useState<SchoolUserRow[]>([]);
@@ -160,19 +164,47 @@ export function SchoolAdminUsersPage() {
 
   const isStudent = role === 'STUDENT';
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-ink">Users</h1>
-          <p className="text-muted">Onboard teachers, students, and parents for your school</p>
-        </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>
-          <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
-      </div>
+  const usersPagination = useClientPagination(users, {
+    resetKey: `${filterRole}|${filterStatus}|${users.length}`,
+  });
 
+  return (
+    <PageWithScrollBelowFilter
+      header={
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-ink">Users</h1>
+            <p className="text-muted">Onboard teachers, students, and parents for your school</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
+      }
+      filter={
+        <FilterPanel>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <CardTitle>School directory</CardTitle>
+            <div className="flex flex-wrap gap-3">
+              <FieldSelect
+                label="Role"
+                value={filterRole}
+                onChange={(v) => setFilterRole(v as typeof filterRole)}
+                options={['ALL', 'STUDENT', 'TEACHER', 'PARENT']}
+              />
+              <FieldSelect
+                label="Status"
+                value={filterStatus}
+                onChange={(v) => setFilterStatus(v as typeof filterStatus)}
+                options={['ACTIVE', 'INACTIVE', 'ALL']}
+              />
+            </div>
+          </div>
+          {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+        </FilterPanel>
+      }
+    >
       <Card>
         <CardTitle>Add user</CardTitle>
         <form onSubmit={(e) => void handleCreate(e)} className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -259,26 +291,8 @@ export function SchoolAdminUsersPage() {
         />
       </Card>
 
-      <Card>
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <CardTitle>School directory</CardTitle>
-          <div className="flex flex-wrap gap-3">
-            <FieldSelect
-              label="Role"
-              value={filterRole}
-              onChange={(v) => setFilterRole(v as typeof filterRole)}
-              options={['ALL', 'STUDENT', 'TEACHER', 'PARENT']}
-            />
-            <FieldSelect
-              label="Status"
-              value={filterStatus}
-              onChange={(v) => setFilterStatus(v as typeof filterStatus)}
-              options={['ACTIVE', 'INACTIVE', 'ALL']}
-            />
-          </div>
-        </div>
-        {error && <p className="mt-2 text-sm text-danger">{error}</p>}
-        <div className="mt-4 overflow-x-auto">
+      <Card className="overflow-hidden !p-0">
+        <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
               <tr className="border-b border-gray-100 text-muted">
@@ -292,7 +306,7 @@ export function SchoolAdminUsersPage() {
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => {
+              {usersPagination.pageItems.map((u) => {
                 const busy = actionUserId === u.id;
                 const editable = isEditableSchoolUser(u.role);
                 return (
@@ -376,9 +390,21 @@ export function SchoolAdminUsersPage() {
             </tbody>
           </table>
           {!isLoading && users.length === 0 && (
-            <p className="py-4 text-sm text-muted">No users found.</p>
+            <p className="px-4 py-4 text-sm text-muted">No users found.</p>
           )}
         </div>
+        {usersPagination.showPagination && !isLoading && users.length > 0 && (
+          <TablePagination
+            page={usersPagination.page}
+            totalPages={usersPagination.totalPages}
+            pageSize={usersPagination.pageSize}
+            totalItems={usersPagination.totalItems}
+            rangeStart={usersPagination.rangeStart}
+            rangeEnd={usersPagination.rangeEnd}
+            onPageChange={usersPagination.setPage}
+            onPageSizeChange={usersPagination.setPageSize}
+          />
+        )}
       </Card>
 
       {editingUser && (
@@ -389,6 +415,6 @@ export function SchoolAdminUsersPage() {
           onSaved={load}
         />
       )}
-    </div>
+    </PageWithScrollBelowFilter>
   );
 }

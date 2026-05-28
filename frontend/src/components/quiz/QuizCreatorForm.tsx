@@ -234,22 +234,9 @@ export function QuizCreatorForm({
                 />
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {!existingQuizId && (
-                <Button onClick={handleCreateQuiz} disabled={isSaving}>
-                  Save draft quiz
-                </Button>
-              )}
-              {!compact && (
-                <Button
-                  variant="outline"
-                  onClick={() => setShowPublishDialog(true)}
-                  disabled={isSaving || !quizId}
-                >
-                  Publish for students
-                </Button>
-              )}
-            </div>
+            <p className="text-xs text-muted">
+              Quiz details are auto-used when you add the first question.
+            </p>
             {compact && existingQuizId && title && (
               <p className="text-xs text-muted">
                 Adding questions to <span className="font-medium text-ink">{title}</span>
@@ -269,6 +256,26 @@ export function QuizCreatorForm({
         <div className="mt-4">
           <ManualMcqForm
             disabled={isSaving}
+            submitLabel="Add question"
+            extraActions={
+              <>
+                {!existingQuizId && (
+                  <Button type="button" variant="outline" onClick={handleCreateQuiz} disabled={isSaving}>
+                    Save draft quiz
+                  </Button>
+                )}
+                {!compact && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowPublishDialog(true)}
+                    disabled={isSaving || !quizId}
+                  >
+                    Publish quiz
+                  </Button>
+                )}
+              </>
+            }
             onSubmit={handleManualSave}
             onCancel={onCancel}
           />

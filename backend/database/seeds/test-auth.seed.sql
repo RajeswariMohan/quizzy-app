@@ -24,7 +24,8 @@ ON CONFLICT (id) DO UPDATE SET
   is_active = true,
   email = EXCLUDED.email,
   role = EXCLUDED.role,
-  school_id = EXCLUDED.school_id;
+  school_id = EXCLUDED.school_id,
+  password_hash = EXCLUDED.password_hash;
 
 INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active)
 VALUES (
@@ -42,6 +43,7 @@ ON CONFLICT (id) DO UPDATE SET
   email = EXCLUDED.email,
   role = EXCLUDED.role,
   school_id = EXCLUDED.school_id,
+  password_hash = EXCLUDED.password_hash,
   grade = 'Class 5',
   section = 'A';
 
@@ -60,7 +62,8 @@ ON CONFLICT (id) DO UPDATE SET
   is_active = true,
   email = EXCLUDED.email,
   role = EXCLUDED.role,
-  school_id = EXCLUDED.school_id;
+  school_id = EXCLUDED.school_id,
+  password_hash = EXCLUDED.password_hash;
 
 INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active)
 VALUES (
@@ -77,7 +80,8 @@ ON CONFLICT (id) DO UPDATE SET
   is_active = true,
   email = EXCLUDED.email,
   role = EXCLUDED.role,
-  school_id = EXCLUDED.school_id;
+  school_id = EXCLUDED.school_id,
+  password_hash = EXCLUDED.password_hash;
 
 INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active)
 VALUES (
@@ -94,4 +98,5 @@ ON CONFLICT (id) DO UPDATE SET
   is_active = true,
   email = EXCLUDED.email,
   role = EXCLUDED.role,
-  school_id = EXCLUDED.school_id;
+  school_id = EXCLUDED.school_id,
+  password_hash = EXCLUDED.password_hash;

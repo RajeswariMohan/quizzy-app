@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { CheckCircle2, Plus, Save } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { getApiErrorMessage, logApiError } from '@/api/client';
@@ -20,6 +20,7 @@ interface ManualMcqFormProps {
   formId?: string;
   initial?: ManualQuestionPayload;
   submitLabel?: string;
+  extraActions?: ReactNode;
   onCancel?: () => void;
   onSubmit: (payload: ManualQuestionPayload) => Promise<void>;
 }
@@ -29,6 +30,7 @@ export function ManualMcqForm({
   formId = 'new',
   initial,
   submitLabel,
+  extraActions,
   onCancel,
   onSubmit,
 }: ManualMcqFormProps) {
@@ -195,7 +197,7 @@ export function ManualMcqForm({
           ) : (
             <Plus className="h-4 w-4" />
           )}
-          {isSaving ? 'Saving…' : submitLabel ?? (isEditMode ? 'Save changes' : 'Save question')}
+          {isSaving ? 'Saving…' : submitLabel ?? (isEditMode ? 'Save changes' : 'Add question')}
         </Button>
         {showCancel && (
           <Button
@@ -207,6 +209,7 @@ export function ManualMcqForm({
             Cancel
           </Button>
         )}
+        {extraActions}
       </div>
     </div>
   );

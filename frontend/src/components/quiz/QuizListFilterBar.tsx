@@ -1,5 +1,5 @@
 import { Search, X } from 'lucide-react';
-import { Card } from '@/components/ui/Card';
+import { FilterPanel } from '@/components/layout/FilterPanel';
 import { Button } from '@/components/ui/Button';
 import { FieldSelect } from '@/components/ui/FieldSelect';
 import { BOARDS } from '@/constants/academics';
@@ -43,7 +43,7 @@ export function QuizListFilterBar({
   };
 
   return (
-    <Card className="!p-4">
+    <FilterPanel>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-ink">Find quizzes</p>
@@ -121,6 +121,6 @@ export function QuizListFilterBar({
           options={['Newest first', 'Oldest first', 'Title (A–Z)']}
         />
       </div>
-    </Card>
+    </FilterPanel>
   );
 }

@@ -13,6 +13,8 @@ import {
 } from '@/api/progress.api';
 import { getApiErrorMessage, logApiError } from '@/api/client';
 import { formatDateTime, formatDuration } from '@/lib/formatDateTime';
+import { useClientPagination } from '@/hooks/useClientPagination';
+import { TablePagination } from '@/components/ui/TablePagination';
 
 export function StudentProgressDetailPage() {
   const { studentId } = useParams<{ studentId: string }>();
@@ -20,6 +22,10 @@ export function StudentProgressDetailPage() {
   const [quizzes, setQuizzes] = useState<QuizProgressRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const quizzesPagination = useClientPagination(quizzes, {
+    resetKey: `${studentId ?? ''}|${quizzes.length}`,
+  });
 
   const load = useCallback(() => {
     if (!studentId) return;
@@ -167,7 +173,7 @@ export function StudentProgressDetailPage() {
                   </td>
                 </tr>
               ) : (
-                quizzes.map((q) => (
+                quizzesPagination.pageItems.map((q) => (
                   <tr key={q.quizId} className="border-b border-gray-50 hover:bg-gray-50/50">
                     <td className="px-4 py-3">
                       <p className="font-medium">{q.title}</p>
@@ -219,6 +225,18 @@ export function StudentProgressDetailPage() {
             </tbody>
           </table>
         </div>
+        {quizzesPagination.showPagination && quizzes.length > 0 && (
+          <TablePagination
+            page={quizzesPagination.page}
+            totalPages={quizzesPagination.totalPages}
+            pageSize={quizzesPagination.pageSize}
+            totalItems={quizzesPagination.totalItems}
+            rangeStart={quizzesPagination.rangeStart}
+            rangeEnd={quizzesPagination.rangeEnd}
+            onPageChange={quizzesPagination.setPage}
+            onPageSizeChange={quizzesPagination.setPageSize}
+          />
+        )}
       </Card>
     </div>
   );

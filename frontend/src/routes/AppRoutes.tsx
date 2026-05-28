@@ -10,6 +10,8 @@ import { TeacherAnalyticsPage } from '@/pages/TeacherAnalyticsPage';
 import { ParentDashboard } from '@/pages/ParentDashboard';
 import { LoginPage } from '@/pages/LoginPage';
 import { WelcomePage } from '@/pages/WelcomePage';
+import { AboutPage } from '@/pages/AboutPage';
+import { ContactPage } from '@/pages/ContactPage';
 import { SignUpPage } from '@/pages/SignUpPage';
 import { DevLoginPage } from '@/pages/DevLoginPage';
 import { AdminOverviewPage } from '@/pages/admin/AdminOverviewPage';
@@ -42,7 +44,7 @@ function ProtectedRoute({ children, roles }: { children: ReactNode; roles?: User
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
 
   if (roles && user && !roles.includes(user.role)) {
@@ -58,6 +60,8 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<WelcomePage />} />
+      <Route path="/about" element={<AboutPage />} />
+      <Route path="/contact" element={<ContactPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignUpPage />} />
       <Route path="/login/dev" element={<DevLoginPage />} />

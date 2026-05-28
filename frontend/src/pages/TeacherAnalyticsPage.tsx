@@ -3,7 +3,6 @@ import { BarChart3, RefreshCw, TrendingUp, UserCircle, Users } from 'lucide-reac
 import { Card, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ClassBarChart } from '@/components/charts/ClassBarChart';
-import { formatQuizCreator, resolveQuizGrade } from '@/utils/quizMeta';
 import { formatUserRole } from '@/utils/userRole';
 import { TopicDonutChart } from '@/components/charts/TopicDonutChart';
 import { PerformanceLineChart } from '@/components/charts/PerformanceLineChart';
@@ -12,12 +11,17 @@ import { getApiErrorMessage, logApiError } from '@/api/client';
 import { useAuthStore } from '@/store/authStore';
 import { useSchoolFilterStore } from '@/store/schoolFilterStore';
 import { AnalyticsFilterBar } from '@/components/analytics/AnalyticsFilterBar';
+import { QuizPerformanceTable } from '@/components/analytics/QuizPerformanceTable';
+import { PageWithScrollBelowFilter } from '@/components/layout/PageWithScrollBelowFilter';
+import { useClientPagination } from '@/hooks/useClientPagination';
+import { TablePagination } from '@/components/ui/TablePagination';
 
 const EMPTY_FILTER_OPTIONS = {
   grades: [] as string[],
   subjects: [] as string[],
   boards: [] as string[],
   topics: [] as string[],
+  links: [] as { grade: string; subject: string; board?: string; topic: string }[],
   creators: [] as { userId: string; displayName: string; role: string }[],
 };
 
@@ -46,6 +50,11 @@ export function TeacherAnalyticsPage() {
     load();
   }, [load, filterVersion]);
 
+  const creatorPerformance = data?.creatorPerformance ?? [];
+  const creatorPagination = useClientPagination(creatorPerformance, {
+    resetKey: `${filterVersion}|${JSON.stringify(analyticsFilters)}|${creatorPerformance.length}`,
+  });
+
   const stats = data
     ? [
         {
@@ -70,22 +79,33 @@ export function TeacherAnalyticsPage() {
   const quizTableRows = (data?.recentQuizzes ?? []).filter((q) => q.status === 'PUBLISHED');
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-ink">Analytics</h1>
-          <p className="text-muted">
-            {isSuperAdmin
-              ? `Aggregated analytics · ${filterLabel}`
-              : 'Class performance, topic mastery, and student rankings from live responses'}
-          </p>
+    <PageWithScrollBelowFilter
+      header={
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-ink">Analytics</h1>
+            <p className="text-muted">
+              {isSuperAdmin
+                ? `Aggregated analytics · ${filterLabel}`
+                : 'Class performance, topic mastery, and student rankings from live responses'}
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
         </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>
-          <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
-      </div>
-
+      }
+      filter={
+        (data || !isLoading) ? (
+          <AnalyticsFilterBar
+            options={data?.filterOptions ?? EMPTY_FILTER_OPTIONS}
+            filters={analyticsFilters}
+            onChange={setAnalyticsFilters}
+          />
+        ) : undefined
+      }
+    >
       {isLoading && !data && (
         <div className="flex min-h-[30vh] items-center justify-center">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
@@ -99,14 +119,6 @@ export function TeacherAnalyticsPage() {
             Try again
           </Button>
         </Card>
-      )}
-
-      {(data || !isLoading) && (
-        <AnalyticsFilterBar
-          options={data?.filterOptions ?? EMPTY_FILTER_OPTIONS}
-          filters={analyticsFilters}
-          onChange={setAnalyticsFilters}
-        />
       )}
 
       {data && (
@@ -160,34 +172,36 @@ export function TeacherAnalyticsPage() {
             </Card>
           </div>
 
-          {(data.creatorPerformance?.length ?? 0) > 0 && (
-            <Card>
-              <CardTitle className="flex items-center gap-2">
-                <UserCircle className="h-5 w-5" />
-                Performance by quiz creator
-              </CardTitle>
-              <p className="mt-1 text-xs text-muted">
-                Teachers and school admins — quiz count and student accuracy on their quizzes
-              </p>
-              <div className="mt-4 overflow-x-auto">
+          {creatorPerformance.length > 0 && (
+            <Card className="overflow-hidden !p-0">
+              <div className="border-b border-gray-100 px-4 py-3">
+                <CardTitle className="flex items-center gap-2">
+                  <UserCircle className="h-5 w-5" />
+                  Performance by quiz creator
+                </CardTitle>
+                <p className="mt-1 text-xs text-muted">
+                  Teachers and school admins — quiz count and student accuracy on their quizzes
+                </p>
+              </div>
+              <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                  <thead className="text-muted">
+                  <thead className="border-b border-gray-200 bg-gray-50 text-xs font-semibold uppercase tracking-wide text-muted">
                     <tr>
-                      <th className="pb-2">Creator</th>
-                      <th className="pb-2">Role</th>
-                      <th className="pb-2">Quizzes</th>
-                      <th className="pb-2">Published</th>
-                      <th className="pb-2">Avg accuracy</th>
+                      <th className="px-4 py-3">Creator</th>
+                      <th className="px-4 py-3">Role</th>
+                      <th className="px-4 py-3">Quizzes</th>
+                      <th className="px-4 py-3">Published</th>
+                      <th className="px-4 py-3">Avg accuracy</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {data.creatorPerformance!.map((row) => (
-                      <tr key={row.userId} className="border-t border-gray-100">
-                        <td className="py-2.5 font-medium">{row.displayName}</td>
-                        <td className="py-2.5">{formatUserRole(row.role)}</td>
-                        <td className="py-2.5">{row.quizCount}</td>
-                        <td className="py-2.5">{row.publishedCount}</td>
-                        <td className="py-2.5">
+                  <tbody className="divide-y divide-gray-100">
+                    {creatorPagination.pageItems.map((row) => (
+                      <tr key={row.userId} className="hover:bg-primary/[0.03]">
+                        <td className="px-4 py-3 font-medium">{row.displayName}</td>
+                        <td className="px-4 py-3">{formatUserRole(row.role)}</td>
+                        <td className="px-4 py-3">{row.quizCount}</td>
+                        <td className="px-4 py-3">{row.publishedCount}</td>
+                        <td className="px-4 py-3">
                           {row.avgAccuracy != null ? `${row.avgAccuracy}%` : '—'}
                         </td>
                       </tr>
@@ -195,6 +209,18 @@ export function TeacherAnalyticsPage() {
                   </tbody>
                 </table>
               </div>
+              {creatorPagination.showPagination && (
+                <TablePagination
+                  page={creatorPagination.page}
+                  totalPages={creatorPagination.totalPages}
+                  pageSize={creatorPagination.pageSize}
+                  totalItems={creatorPagination.totalItems}
+                  rangeStart={creatorPagination.rangeStart}
+                  rangeEnd={creatorPagination.rangeEnd}
+                  onPageChange={creatorPagination.setPage}
+                  onPageSizeChange={creatorPagination.setPageSize}
+                />
+              )}
             </Card>
           )}
 
@@ -236,39 +262,14 @@ export function TeacherAnalyticsPage() {
             </Card>
           </div>
 
-          <Card>
-            <CardTitle>All quizzes — performance summary</CardTitle>
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="text-muted">
-                  <tr>
-                    <th className="pb-2">Quiz</th>
-                    <th className="pb-2">Created by</th>
-                    <th className="pb-2">Grade</th>
-                    <th className="pb-2">Status</th>
-                    <th className="pb-2">Questions</th>
-                    <th className="pb-2">Avg accuracy</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.recentQuizzes.map((q) => (
-                    <tr key={q.id} className="border-t border-gray-100">
-                      <td className="py-2.5 font-medium">{q.title}</td>
-                      <td className="py-2.5">{formatQuizCreator(q) ?? '—'}</td>
-                      <td className="py-2.5">{resolveQuizGrade(q) ?? '—'}</td>
-                      <td className="py-2.5">{q.status}</td>
-                      <td className="py-2.5">{q.questionCount ?? 0}</td>
-                      <td className="py-2.5">
-                        {q.avgAccuracy != null ? `${q.avgAccuracy}%` : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+          <QuizPerformanceTable
+            quizzes={data.quizSummaryList ?? data.recentQuizzes}
+            filterOptions={data.filterOptions ?? EMPTY_FILTER_OPTIONS}
+            filters={analyticsFilters}
+            onFiltersChange={setAnalyticsFilters}
+          />
         </>
       )}
-    </div>
+    </PageWithScrollBelowFilter>
   );
 }

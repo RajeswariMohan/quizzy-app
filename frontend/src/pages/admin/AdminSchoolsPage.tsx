@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { RefreshCw, Building2, Building } from 'lucide-react';
+import { PageWithScrollBelowFilter } from '@/components/layout/PageWithScrollBelowFilter';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -140,36 +141,38 @@ export function AdminSchoolsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-ink">Schools</h1>
-          <p className="text-muted">Onboard schools and control user capacity per tenant</p>
+    <PageWithScrollBelowFilter
+      header={
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-ink">Schools</h1>
+            <p className="text-muted">Onboard schools and control user capacity per tenant</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <FieldSelect
+              label="Schools shown"
+              value={
+                schoolsStatus === 'inactive'
+                  ? 'Inactive'
+                  : schoolsStatus === 'all'
+                    ? 'All'
+                    : 'Active'
+              }
+              onChange={(v) => {
+                const next: AdminSchoolsStatusFilter =
+                  v === 'Inactive' ? 'inactive' : v === 'All' ? 'all' : 'active';
+                setSchoolsStatus(next);
+              }}
+              options={['Active', 'Inactive', 'All']}
+            />
+            <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <FieldSelect
-            label="Schools shown"
-            value={
-              schoolsStatus === 'inactive'
-                ? 'Inactive'
-                : schoolsStatus === 'all'
-                  ? 'All'
-                  : 'Active'
-            }
-            onChange={(v) => {
-              const next: AdminSchoolsStatusFilter =
-                v === 'Inactive' ? 'inactive' : v === 'All' ? 'all' : 'active';
-              setSchoolsStatus(next);
-            }}
-            options={['Active', 'Inactive', 'All']}
-          />
-          <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-        </div>
-      </div>
-
+      }
+    >
       {totals && (
         <p className="text-sm text-muted">
           Platform: {totals.activeSchools} active school{totals.activeSchools === 1 ? '' : 's'}
@@ -393,6 +396,6 @@ export function AdminSchoolsPage() {
           </p>
         </Card>
       )}
-    </div>
+    </PageWithScrollBelowFilter>
   );
 }

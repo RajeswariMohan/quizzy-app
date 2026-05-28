@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { MessageSquare, RefreshCw } from 'lucide-react';
+import { FilterPanel } from '@/components/layout/FilterPanel';
+import { PageWithScrollBelowFilter } from '@/components/layout/PageWithScrollBelowFilter';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { FieldSelect } from '@/components/ui/FieldSelect';
@@ -86,20 +88,40 @@ export function AdminFeedbackPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-ink">User feedback</h1>
-          <p className="text-muted">
-            Experience submissions from students, parents, and school admins
-          </p>
+    <PageWithScrollBelowFilter
+      header={
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-ink">User feedback</h1>
+            <p className="text-muted">
+              Experience submissions from students, parents, and school admins
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
         </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>
-          <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
-      </div>
-
+      }
+      filter={
+        <FilterPanel>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FieldSelect
+              label="Status"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[...STATUS_OPTIONS]}
+            />
+            <FieldSelect
+              label="Role"
+              value={roleFilter}
+              onChange={setRoleFilter}
+              options={[...ROLE_OPTIONS]}
+            />
+          </div>
+        </FilterPanel>
+      }
+    >
       <div className="grid gap-4 sm:grid-cols-2">
         <Card className="!p-4">
           <p className="text-sm text-muted">Open items</p>
@@ -110,23 +132,6 @@ export function AdminFeedbackPage() {
           <p className="text-2xl font-bold">{items.length}</p>
         </Card>
       </div>
-
-      <Card className="!p-4">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <FieldSelect
-            label="Status"
-            value={statusFilter}
-            onChange={setStatusFilter}
-            options={[...STATUS_OPTIONS]}
-          />
-          <FieldSelect
-            label="Role"
-            value={roleFilter}
-            onChange={setRoleFilter}
-            options={[...ROLE_OPTIONS]}
-          />
-        </div>
-      </Card>
 
       {error && (
         <Card>
@@ -223,6 +228,6 @@ export function AdminFeedbackPage() {
           )}
         </Card>
       </div>
-    </div>
+    </PageWithScrollBelowFilter>
   );
 }

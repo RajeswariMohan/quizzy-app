@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Building2, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useSchoolFilterStore } from '@/store/schoolFilterStore';
@@ -6,6 +6,7 @@ import { logApiError } from '@/api/client';
 
 export function SuperAdminSchoolFilter() {
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const {
     mode,
     selectedSchoolIds,
@@ -22,10 +23,32 @@ export function SuperAdminSchoolFilter() {
     loadSchools().catch((err) => logApiError('Load schools failed', err));
   }, [loadSchools]);
 
+  useEffect(() => {
+    if (!open) return;
+
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (rootRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onEscape);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onEscape);
+    };
+  }, [open]);
+
   const selectedCount = mode === 'selected' ? selectedSchoolIds.length : schools.length;
 
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -38,12 +61,6 @@ export function SuperAdminSchoolFilter() {
 
       {open && (
         <>
-          <button
-            type="button"
-            className="fixed inset-0 z-40 cursor-default"
-            aria-label="Close school filter"
-            onClick={() => setOpen(false)}
-          />
           <div className="absolute right-0 z-50 mt-2 w-80 rounded-xl border border-gray-200 bg-white p-3 shadow-lg">
             <p className="text-xs font-medium text-muted">Filter data by school</p>
             <p className="mt-1 text-[11px] text-muted">

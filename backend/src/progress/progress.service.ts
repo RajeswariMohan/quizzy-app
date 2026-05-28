@@ -59,6 +59,22 @@ export class ProgressService {
       .orderBy('u.last_name', 'ASC')
       .addOrderBy('u.first_name', 'ASC');
 
+    if (tenant.role === UserRole.TEACHER) {
+      qb.andWhere(
+        `EXISTS (
+          SELECT 1
+          FROM student_responses r
+          INNER JOIN quizzes q
+            ON q.id = r.quiz_id
+           AND q.school_id = r.school_id
+          WHERE r.student_id = u.id
+            AND r.school_id = :schoolId
+            AND q.created_by_user_id = :teacherUserId
+        )`,
+        { schoolId, teacherUserId: tenant.userId },
+      );
+    }
+
     if (query.grade?.trim()) {
       qb.andWhere('u.grade = :grade', { grade: query.grade.trim() });
     }
@@ -223,6 +239,30 @@ export class ProgressService {
     if (!student) {
       throw new NotFoundException('Student not found');
     }
+
+    if (tenant.role === UserRole.TEACHER) {
+      const related = await this.responseRepository
+        .createQueryBuilder('r')
+        .innerJoin(
+          Quiz,
+          'q',
+          'q.id = r.quiz_id AND q.school_id = r.school_id',
+        )
+        .where('r.school_id = :schoolId', { schoolId })
+        .andWhere('r.student_id = :studentId', { studentId })
+        .andWhere('q.created_by_user_id = :teacherUserId', {
+          teacherUserId: tenant.userId,
+        })
+        .limit(1)
+        .getRawOne();
+
+      if (!related) {
+        throw new ForbiddenException(
+          'Teachers can only view progress for students related to their quizzes',
+        );
+      }
+    }
+
     return student;
   }
 

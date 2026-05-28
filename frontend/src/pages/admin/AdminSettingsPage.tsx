@@ -81,7 +81,12 @@ export function AdminSettingsPage() {
     setError(null);
     try {
       const updated = await updatePlatformSettings({
-        ...settings,
+        aiGenerationEnabled: settings.aiGenerationEnabled,
+        studentLeaderboardEnabled: settings.studentLeaderboardEnabled,
+        parentPortalEnabled: settings.parentPortalEnabled,
+        teacherQuizCreationEnabled: settings.teacherQuizCreationEnabled,
+        gamificationEnabled: settings.gamificationEnabled,
+        maintenanceMode: settings.maintenanceMode,
         maintenanceMessage: maintenanceMessage.trim() || null,
       });
       setSettings(updated);

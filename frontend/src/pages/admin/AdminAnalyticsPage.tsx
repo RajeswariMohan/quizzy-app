@@ -6,6 +6,8 @@ import { ClassBarChart } from '@/components/charts/ClassBarChart';
 import { fetchSchoolAnalytics } from '@/api/admin.api';
 import { getApiErrorMessage, logApiError } from '@/api/client';
 import { useSchoolFilterStore } from '@/store/schoolFilterStore';
+import { useClientPagination } from '@/hooks/useClientPagination';
+import { TablePagination } from '@/components/ui/TablePagination';
 
 export function AdminAnalyticsPage() {
   const filterVersion = useSchoolFilterStore((s) => s.filterVersion);
@@ -50,6 +52,10 @@ export function AdminAnalyticsPage() {
     [schools],
   );
 
+  const schoolsPagination = useClientPagination(schools, {
+    resetKey: `${filterVersion}|${schools.length}`,
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -88,34 +94,48 @@ export function AdminAnalyticsPage() {
         </Card>
       </div>
 
-      <Card>
-        <CardTitle>Detailed comparison</CardTitle>
-        <div className="mt-4 overflow-x-auto">
+      <Card className="overflow-hidden !p-0">
+        <div className="border-b border-gray-100 px-4 py-3">
+          <CardTitle>Detailed comparison</CardTitle>
+        </div>
+        <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 text-muted">
-                <th className="pb-2 pr-3 font-medium">School</th>
-                <th className="pb-2 pr-3 font-medium">Students</th>
-                <th className="pb-2 pr-3 font-medium">Teachers</th>
-                <th className="pb-2 pr-3 font-medium">Parents</th>
-                <th className="pb-2 pr-3 font-medium">Quizzes</th>
-                <th className="pb-2 font-medium">Accuracy</th>
+            <thead className="border-b border-gray-200 bg-gray-50 text-xs font-semibold uppercase tracking-wide text-muted">
+              <tr>
+                <th className="px-4 py-3">School</th>
+                <th className="px-4 py-3">Students</th>
+                <th className="px-4 py-3">Teachers</th>
+                <th className="px-4 py-3">Parents</th>
+                <th className="px-4 py-3">Quizzes</th>
+                <th className="px-4 py-3">Accuracy</th>
               </tr>
             </thead>
-            <tbody>
-              {schools.map((s) => (
-                <tr key={s.id} className="border-b border-gray-50">
-                  <td className="py-2.5 pr-3 font-medium">{s.name}</td>
-                  <td className="py-2.5 pr-3">{s.students}</td>
-                  <td className="py-2.5 pr-3">{s.teachers}</td>
-                  <td className="py-2.5 pr-3">{s.parents}</td>
-                  <td className="py-2.5 pr-3">{s.publishedQuizzes}</td>
-                  <td className="py-2.5">{s.avgAccuracy}%</td>
+            <tbody className="divide-y divide-gray-100">
+              {schoolsPagination.pageItems.map((s) => (
+                <tr key={s.id} className="hover:bg-primary/[0.03]">
+                  <td className="px-4 py-3 font-medium">{s.name}</td>
+                  <td className="px-4 py-3">{s.students}</td>
+                  <td className="px-4 py-3">{s.teachers}</td>
+                  <td className="px-4 py-3">{s.parents}</td>
+                  <td className="px-4 py-3">{s.publishedQuizzes}</td>
+                  <td className="px-4 py-3">{s.avgAccuracy}%</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        {schoolsPagination.showPagination && (
+          <TablePagination
+            page={schoolsPagination.page}
+            totalPages={schoolsPagination.totalPages}
+            pageSize={schoolsPagination.pageSize}
+            totalItems={schoolsPagination.totalItems}
+            rangeStart={schoolsPagination.rangeStart}
+            rangeEnd={schoolsPagination.rangeEnd}
+            onPageChange={schoolsPagination.setPage}
+            onPageSizeChange={schoolsPagination.setPageSize}
+          />
+        )}
       </Card>
     </div>
   );

@@ -1,14 +1,20 @@
-import { useCallback } from 'react';
+import { useMemo } from 'react';
 import { X } from 'lucide-react';
-import { Card } from '@/components/ui/Card';
+import { FilterPanel } from '@/components/layout/FilterPanel';
 import { Button } from '@/components/ui/Button';
 import { FieldSelect } from '@/components/ui/FieldSelect';
 import { useSchoolAcademics } from '@/hooks/useSchoolAcademics';
-import { mergeAcademicOptions } from '@/utils/academicOptions';
-import { formatUserRole } from '@/utils/userRole';
+import {
+  ANALYTICS_FILTER_ALL,
+  applyAnalyticsFilterField,
+  buildCreatorLabelByUserId,
+  buildCreatorOptionLabels,
+  getLinkedFilterValues,
+  mergeAnalyticsFilterOptions,
+  resolveCreatorUserId,
+  withAllOption,
+} from '@/utils/analyticsFilterLinks';
 import type { AnalyticsFilterOptions, AnalyticsQueryFilters } from '@/api/dashboard.api';
-
-const ALL = 'All';
 
 interface AnalyticsFilterBarProps {
   options: AnalyticsFilterOptions;
@@ -16,37 +22,42 @@ interface AnalyticsFilterBarProps {
   onChange: (filters: AnalyticsQueryFilters) => void;
 }
 
-function withAll(values: string[]): string[] {
-  return ['All', ...values];
-}
-
 export function AnalyticsFilterBar({ options, filters, onChange }: AnalyticsFilterBarProps) {
   const { grades: schoolGrades, subjects: schoolSubjects } = useSchoolAcademics();
-  const mergedOptions: AnalyticsFilterOptions = {
-    ...options,
-    grades: mergeAcademicOptions(schoolGrades, options.grades),
-    subjects: mergeAcademicOptions(schoolSubjects, options.subjects),
-  };
-  const setField = useCallback(
-    (key: keyof AnalyticsQueryFilters, raw: string) => {
-      const value = raw === 'All' ? undefined : raw;
-      onChange({ ...filters, [key]: value || undefined });
-    },
-    [filters, onChange],
+  const mergedOptions = useMemo(
+    () => mergeAnalyticsFilterOptions(options, schoolGrades, schoolSubjects),
+    [options, schoolGrades, schoolSubjects],
+  );
+  const links = mergedOptions.links ?? [];
+
+  const linkedValues = useMemo(
+    () =>
+      getLinkedFilterValues(links, filters, {
+        grades: mergedOptions.grades,
+        subjects: mergedOptions.subjects,
+        topics: mergedOptions.topics,
+      }),
+    [links, filters, mergedOptions.grades, mergedOptions.subjects, mergedOptions.topics],
   );
 
-  const creatorOptions = (mergedOptions.creators ?? []).map(
-    (c) => `${c.displayName} (${formatUserRole(c.role)})`,
-  );
-  const creatorLabelByUserId = new Map(
-    (mergedOptions.creators ?? []).map((c) => [
-      c.userId,
-      `${c.displayName} (${formatUserRole(c.role)})`,
-    ]),
-  );
+  const setField = (key: keyof AnalyticsQueryFilters, raw: string) => {
+    onChange(
+      applyAnalyticsFilterField(
+        filters,
+        key,
+        raw,
+        linkedValues.topics,
+        mergedOptions.topics,
+        links.length,
+      ),
+    );
+  };
+
+  const creatorOptions = buildCreatorOptionLabels(mergedOptions.creators);
+  const creatorLabelByUserId = buildCreatorLabelByUserId(mergedOptions.creators);
   const selectedCreatorLabel = filters.createdByUserId
-    ? creatorLabelByUserId.get(filters.createdByUserId) ?? ALL
-    : ALL;
+    ? creatorLabelByUserId.get(filters.createdByUserId) ?? ANALYTICS_FILTER_ALL
+    : ANALYTICS_FILTER_ALL;
 
   const hasActive =
     !!filters.grade ||
@@ -56,7 +67,7 @@ export function AnalyticsFilterBar({ options, filters, onChange }: AnalyticsFilt
     !!filters.createdByUserId;
 
   return (
-    <Card className="!p-4">
+    <FilterPanel>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-ink">Slice &amp; dice</p>
@@ -75,46 +86,37 @@ export function AnalyticsFilterBar({ options, filters, onChange }: AnalyticsFilt
             label="Created by"
             value={selectedCreatorLabel}
             onChange={(label) => {
-              if (label === ALL) {
-                onChange({ ...filters, createdByUserId: undefined });
-                return;
-              }
-              const match = (mergedOptions.creators ?? []).find(
-                (c) => `${c.displayName} (${formatUserRole(c.role)})` === label,
-              );
-              onChange({
-                ...filters,
-                createdByUserId: match?.userId,
-              });
+              const userId = resolveCreatorUserId(label, mergedOptions.creators);
+              onChange({ ...filters, createdByUserId: userId });
             }}
-            options={withAll(creatorOptions)}
+            options={withAllOption(creatorOptions)}
           />
         )}
         <FieldSelect
           label="Grade"
-          value={filters.grade ?? ALL}
+          value={filters.grade ?? ANALYTICS_FILTER_ALL}
           onChange={(v) => setField('grade', v)}
-          options={withAll(mergedOptions.grades)}
+          options={withAllOption(linkedValues.grades)}
         />
         <FieldSelect
           label="Subject"
-          value={filters.subject ?? ALL}
+          value={filters.subject ?? ANALYTICS_FILTER_ALL}
           onChange={(v) => setField('subject', v)}
-          options={withAll(mergedOptions.subjects)}
+          options={withAllOption(linkedValues.subjects)}
         />
         <FieldSelect
           label="Board"
-          value={filters.board ?? ALL}
+          value={filters.board ?? ANALYTICS_FILTER_ALL}
           onChange={(v) => setField('board', v)}
-          options={withAll(mergedOptions.boards)}
+          options={withAllOption(mergedOptions.boards)}
         />
         <FieldSelect
           label="Topic"
-          value={filters.topic ?? ALL}
+          value={filters.topic ?? ANALYTICS_FILTER_ALL}
           onChange={(v) => setField('topic', v)}
-          options={withAll(mergedOptions.topics)}
+          options={withAllOption(linkedValues.topics)}
         />
       </div>
-    </Card>
+    </FilterPanel>
   );
 }

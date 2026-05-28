@@ -104,7 +104,7 @@ describe('QuizService', () => {
     const quiz = await service.findOne(buildTeacherTenant(), 'quiz-1');
     expect(quizFindOne).toHaveBeenCalledWith({
       where: { id: 'quiz-1', schoolId: SCHOOL_ID },
-      relations: ['questions'],
+      relations: ['questions', 'createdBy'],
     });
     expect(quiz.id).toBe('quiz-1');
   });

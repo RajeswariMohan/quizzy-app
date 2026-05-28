@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/Button';
 import { fetchPlatformOverview } from '@/api/admin.api';
 import { getApiErrorMessage, logApiError } from '@/api/client';
 import { useSchoolFilterStore } from '@/store/schoolFilterStore';
+import { useClientPagination } from '@/hooks/useClientPagination';
+import { TablePagination } from '@/components/ui/TablePagination';
 
 export function AdminOverviewPage() {
   const filterVersion = useSchoolFilterStore((s) => s.filterVersion);
@@ -15,6 +17,11 @@ export function AdminOverviewPage() {
   );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const overviewSchools = data?.schools ?? [];
+  const schoolsPagination = useClientPagination(overviewSchools, {
+    resetKey: `${filterVersion}|${overviewSchools.length}`,
+  });
 
   const load = useCallback(() => {
     setIsLoading(true);
@@ -48,7 +55,7 @@ export function AdminOverviewPage() {
     );
   }
 
-  const { totals, schools, settings } = data;
+  const { totals, settings } = data;
   const statCards = [
     { label: 'Active schools', value: String(totals.activeSchools), icon: Building2 },
     { label: 'Students', value: String(totals.students), icon: Users },
@@ -93,35 +100,51 @@ export function AdminOverviewPage() {
         ))}
       </div>
 
-      <Card>
-        <CardTitle>Schools at a glance</CardTitle>
-        <div className="mt-4 overflow-x-auto">
+      <Card className="overflow-hidden !p-0">
+        <div className="border-b border-gray-100 px-4 py-3">
+          <CardTitle>Schools at a glance</CardTitle>
+        </div>
+        <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 text-muted">
-                <th className="pb-2 pr-4 font-medium">School</th>
-                <th className="pb-2 pr-4 font-medium">Students</th>
-                <th className="pb-2 pr-4 font-medium">Teachers</th>
-                <th className="pb-2 pr-4 font-medium">Quizzes</th>
-                <th className="pb-2 font-medium">Avg accuracy</th>
+            <thead className="border-b border-gray-200 bg-gray-50 text-xs font-semibold uppercase tracking-wide text-muted">
+              <tr>
+                <th className="px-4 py-3">School</th>
+                <th className="px-4 py-3">Students</th>
+                <th className="px-4 py-3">Teachers</th>
+                <th className="px-4 py-3">Quizzes</th>
+                <th className="px-4 py-3">Avg accuracy</th>
               </tr>
             </thead>
-            <tbody>
-              {schools.map((s) => (
-                <tr key={s.id} className="border-b border-gray-50">
-                  <td className="py-2.5 pr-4 font-medium text-ink">{s.name}</td>
-                  <td className="py-2.5 pr-4">{s.students}</td>
-                  <td className="py-2.5 pr-4">{s.teachers}</td>
-                  <td className="py-2.5 pr-4">{s.publishedQuizzes}</td>
-                  <td className="py-2.5">{s.avgAccuracy}%</td>
+            <tbody className="divide-y divide-gray-100">
+              {schoolsPagination.pageItems.map((s) => (
+                <tr key={s.id} className="hover:bg-primary/[0.03]">
+                  <td className="px-4 py-3 font-medium text-ink">{s.name}</td>
+                  <td className="px-4 py-3">{s.students}</td>
+                  <td className="px-4 py-3">{s.teachers}</td>
+                  <td className="px-4 py-3">{s.publishedQuizzes}</td>
+                  <td className="px-4 py-3">{s.avgAccuracy}%</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <Link to="/admin/schools" className="mt-4 inline-block text-sm text-primary hover:underline">
-          View all schools →
-        </Link>
+        {schoolsPagination.showPagination && (
+          <TablePagination
+            page={schoolsPagination.page}
+            totalPages={schoolsPagination.totalPages}
+            pageSize={schoolsPagination.pageSize}
+            totalItems={schoolsPagination.totalItems}
+            rangeStart={schoolsPagination.rangeStart}
+            rangeEnd={schoolsPagination.rangeEnd}
+            onPageChange={schoolsPagination.setPage}
+            onPageSizeChange={schoolsPagination.setPageSize}
+          />
+        )}
+        <div className="border-t border-gray-100 px-4 py-3">
+          <Link to="/admin/schools" className="text-sm text-primary hover:underline">
+            View all schools →
+          </Link>
+        </div>
       </Card>
     </div>
   );

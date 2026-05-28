@@ -14,11 +14,16 @@ export interface ParentChildSummary {
     displayName: string;
     xpPoints: number;
     currentStreak: number;
+    level: number;
+    xpInLevel: number;
+    xpToNextLevel: number;
   };
   stats: {
     quizzesTaken: number;
     accuracy: number;
     totalAnswers: number;
+    pointsEarned: number;
+    pointsAvailable: number;
   };
   recentActivity: {
     id: string;

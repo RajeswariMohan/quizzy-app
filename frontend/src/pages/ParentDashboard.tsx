@@ -155,6 +155,14 @@ export function ParentDashboard() {
   }
 
   const { child, stats } = summary;
+  const xpPercent =
+    child.xpToNextLevel > 0
+      ? Math.round((child.xpInLevel / child.xpToNextLevel) * 100)
+      : 0;
+  const quizXpPercent =
+    stats.pointsAvailable > 0
+      ? Math.round((stats.pointsEarned / stats.pointsAvailable) * 100)
+      : 0;
   const events: ActivityEvent[] = summary.recentActivity.map((a) => ({
     id: a.id,
     title: a.title,
@@ -209,8 +217,45 @@ export function ParentDashboard() {
       </div>
 
       <Card className="!p-4">
-        <p className="text-sm text-muted">Total XP earned</p>
-        <p className="text-2xl font-bold text-ink">{child.xpPoints}</p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm text-muted">{child.displayName}&apos;s XP</p>
+            <p className="text-2xl font-bold text-ink">
+              {child.xpPoints}
+              <span className="ml-2 text-base font-normal text-muted">lifetime total</span>
+            </p>
+          </div>
+          <span className="rounded-lg bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
+            Level {child.level}
+          </span>
+        </div>
+        {stats.pointsAvailable > 0 ? (
+          <p className="mt-2 text-sm text-muted">
+            Earned{' '}
+            <span className="font-medium text-ink">
+              {stats.pointsEarned} of {stats.pointsAvailable} XP
+            </span>{' '}
+            on questions answered ({quizXpPercent}%)
+          </p>
+        ) : (
+          <p className="mt-2 text-sm text-muted">
+            No quiz answers yet — XP will show here once {child.displayName} starts quizzes.
+          </p>
+        )}
+        <div className="mt-4">
+          <div className="mb-1 flex justify-between text-xs text-muted">
+            <span>
+              {child.xpInLevel} / {child.xpToNextLevel} XP toward level {child.level + 1}
+            </span>
+            <span className="font-medium text-primary">{xpPercent}%</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-gray-200">
+            <div
+              className="h-full rounded-full bg-primary transition-all"
+              style={{ width: `${xpPercent}%` }}
+            />
+          </div>
+        </div>
       </Card>
 
       <UpsellCard />

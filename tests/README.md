@@ -102,12 +102,13 @@ cd backend && bash scripts/test-db-prep.sh
 
 ## What is covered
 
-- **Auth & RBAC** — login, tenant context, permissions
+- **Auth & RBAC** — login, register, dev token, tenant context, permissions (happy + negative)
+- **Teacher dashboard** — full `quizSummaryList`, capped `recentQuizzes`, analytics query validation (e2e)
 - **Quizzes & questions** — create, publish, delete draft questions
 - **Student flow** — taking quizzes, responses
 - **Feedback** — submit and admin review
 - **Data backup** — export/import, scope checks
-- **Frontend** — quiz list filters, backup JSON shape validation
+- **Frontend** — quiz list filters, analytics filter links, quiz performance table sort/filter, client pagination, student progress status, public landing copy, demo video storage (IndexedDB), role home paths, backup JSON shape validation
 - **LLM / AI** — validators and mock generation
 
 ## Example output
@@ -121,11 +122,7 @@ PASS src/quiz/quiz.service.spec.ts
 Test Suites: 10 passed, 10 total
 ```
 
-Successful e2e run ends with:
-
-```
-Test Suites: 9 passed, 9 total
-```
+Successful e2e run ends with all `*.e2e-spec.ts` suites passing (including `dashboard-analytics` and expanded `auth-login`).
 
 ## Troubleshooting
 
