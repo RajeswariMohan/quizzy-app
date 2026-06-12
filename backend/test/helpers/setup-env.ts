@@ -10,4 +10,6 @@ export function applyTestEnvironment(): void {
   process.env.DATABASE_NAME = process.env.DATABASE_NAME ?? 'quizzy';
   process.env.DEFAULT_SCHOOL_ID =
     process.env.DEFAULT_SCHOOL_ID ?? '11111111-1111-1111-1111-111111111111';
+  process.env.UNLISTED_SCHOOL_ID =
+    process.env.UNLISTED_SCHOOL_ID ?? '77777777-7777-7777-7777-777777777777';
 }

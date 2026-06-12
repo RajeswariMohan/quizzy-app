@@ -35,6 +35,44 @@ describe('Teacher dashboard analytics (e2e)', () => {
     expect(res.body.quizSummaryList.length).toBeGreaterThanOrEqual(res.body.recentQuizzes.length);
     expect(res.body.stats).toBeDefined();
     expect(res.body.filterOptions).toBeDefined();
+    expect(Array.isArray(res.body.subjectPerformance)).toBe(true);
+    expect(Array.isArray(res.body.topicPerformance)).toBe(true);
+    for (const row of res.body.subjectPerformance) {
+      expect(row).toMatchObject({
+        subject: expect.any(String),
+        score: expect.any(Number),
+        answeredCount: expect.any(Number),
+        correctCount: expect.any(Number),
+      });
+    }
+    for (const row of res.body.topicPerformance) {
+      expect(row).toMatchObject({
+        topic: expect.any(String),
+        score: expect.any(Number),
+        answeredCount: expect.any(Number),
+        correctCount: expect.any(Number),
+      });
+    }
+    expect(res.body.creatorPerformance).toEqual([]);
+    expect(res.body.quizSummaryList.every((q: { createdBy?: { userId?: string } }) =>
+      !q.createdBy?.userId || q.createdBy.userId === TEACHER_ID,
+    )).toBe(true);
+  });
+
+  it('teacher stats are scoped to their quizzes, not whole school', async () => {
+    const teacherRes = await request(app.getHttpServer())
+      .get('/api/quizzes/dashboard/overview')
+      .set(teacherAuth())
+      .expect(200);
+
+    expect(teacherRes.body.creatorPerformance).toEqual([]);
+    expect(teacherRes.body.stats.quizzesConducted).toBe(
+      teacherRes.body.quizSummaryList.filter(
+        (q: { status: string }) => q.status === 'PUBLISHED',
+      ).length,
+    );
+    expect(typeof teacherRes.body.stats.totalStudents).toBe('number');
+    expect(teacherRes.body.stats.totalStudents).toBeGreaterThanOrEqual(0);
   });
 
   it('GET /api/quizzes/dashboard/overview accepts grade filter', async () => {
@@ -45,6 +83,8 @@ describe('Teacher dashboard analytics (e2e)', () => {
       .expect(200);
 
     expect(res.body.appliedFilters.grade).toBe('Class 8');
+    expect(Array.isArray(res.body.subjectPerformance)).toBe(true);
+    expect(Array.isArray(res.body.topicPerformance)).toBe(true);
   });
 
   it('rejects invalid createdByUserId (not a UUID)', async () => {
@@ -55,14 +95,15 @@ describe('Teacher dashboard analytics (e2e)', () => {
       .expect(400);
   });
 
-  it('treats createdByUserId=all as unset', async () => {
+  it('ignores createdByUserId query for teachers and keeps implicit creator scope', async () => {
     const res = await request(app.getHttpServer())
       .get('/api/quizzes/dashboard/overview')
       .query({ createdByUserId: 'all' })
       .set(teacherAuth())
       .expect(200);
 
-    expect(res.body.appliedFilters.createdByUserId).toBeNull();
+    expect(res.body.appliedFilters.createdByUserId).toBe(TEACHER_ID);
+    expect(res.body.creatorPerformance).toEqual([]);
   });
 
   it('denies students from teacher dashboard overview', async () => {

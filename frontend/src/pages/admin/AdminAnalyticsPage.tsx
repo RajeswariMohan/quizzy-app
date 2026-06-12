@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, X } from 'lucide-react';
+import { FilterPanel } from '@/components/layout/FilterPanel';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { TableSearchInput } from '@/components/ui/TableSearchInput';
 import { ClassBarChart } from '@/components/charts/ClassBarChart';
 import { fetchSchoolAnalytics } from '@/api/admin.api';
 import { getApiErrorMessage, logApiError } from '@/api/client';
 import { useSchoolFilterStore } from '@/store/schoolFilterStore';
 import { useClientPagination } from '@/hooks/useClientPagination';
 import { TablePagination } from '@/components/ui/TablePagination';
+import { matchesTableSearch } from '@/utils/tableFilters';
 
 export function AdminAnalyticsPage() {
   const filterVersion = useSchoolFilterStore((s) => s.filterVersion);
@@ -17,6 +20,7 @@ export function AdminAnalyticsPage() {
   >([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
   const load = useCallback(() => {
     setIsLoading(true);
@@ -34,26 +38,40 @@ export function AdminAnalyticsPage() {
     load();
   }, [load, filterVersion]);
 
+  const filteredSchools = useMemo(
+    () =>
+      schools.filter((s) =>
+        matchesTableSearch(search, [
+          s.name,
+          String(s.students),
+          String(s.teachers),
+          String(s.parents),
+          String(s.publishedQuizzes),
+        ]),
+      ),
+    [schools, search],
+  );
+
   const studentChart = useMemo(
     () =>
-      schools.map((s) => ({
+      filteredSchools.map((s) => ({
         label: s.name.length > 12 ? `${s.name.slice(0, 10)}…` : s.name,
         value: s.students,
       })),
-    [schools],
+    [filteredSchools],
   );
 
   const accuracyChart = useMemo(
     () =>
-      schools.map((s) => ({
+      filteredSchools.map((s) => ({
         label: s.name.length > 12 ? `${s.name.slice(0, 10)}…` : s.name,
         value: s.avgAccuracy,
       })),
-    [schools],
+    [filteredSchools],
   );
 
-  const schoolsPagination = useClientPagination(schools, {
-    resetKey: `${filterVersion}|${schools.length}`,
+  const schoolsPagination = useClientPagination(filteredSchools, {
+    resetKey: `${filterVersion}|${search}|${filteredSchools.length}`,
   });
 
   return (
@@ -70,6 +88,32 @@ export function AdminAnalyticsPage() {
       </div>
 
       {error && <p className="text-sm text-danger">{error}</p>}
+
+      <FilterPanel>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-ink">Filter comparison</p>
+            <p className="text-xs text-muted">
+              Showing {filteredSchools.length} of {schools.length}
+              {search.trim() ? ' · search active' : ''}
+            </p>
+          </div>
+          {search.trim() && (
+            <Button type="button" variant="outline" size="sm" onClick={() => setSearch('')}>
+              <X className="h-4 w-4" />
+              Clear
+            </Button>
+          )}
+        </div>
+        <div className="mt-3">
+          <TableSearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="School name…"
+            label="Search schools"
+          />
+        </div>
+      </FilterPanel>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Database, Download, Upload } from 'lucide-react';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { SelectedFileRow } from '@/components/ui/FileUploadCancel';
 import { downloadDataBackup, importDataBackup } from '@/api/dataTransfer.api';
 import { getApiErrorMessage, logApiError } from '@/api/client';
 import { useAuthStore } from '@/store/authStore';
@@ -19,6 +20,15 @@ export function DataBackupPage() {
   const [isValidating, setIsValidating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const clearSelectedFile = () => {
+    setFile(null);
+    setConfirmImport(false);
+    setResult(null);
+    setError(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -65,8 +75,7 @@ export function DataBackupPage() {
       setResult(
         `Import complete — merged ${res.imported.schools} schools, ${res.imported.users} users, ${res.imported.quizzes} quizzes, ${res.imported.questions} questions.`,
       );
-      setFile(null);
-      setConfirmImport(false);
+      clearSelectedFile();
     } catch (err) {
       logApiError('Import failed', err);
       setError(getApiErrorMessage(err, 'Could not import backup.'));
@@ -74,6 +83,8 @@ export function DataBackupPage() {
       setIsImporting(false);
     }
   };
+
+  const isBusy = isValidating || isImporting;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -116,9 +127,11 @@ export function DataBackupPage() {
         </p>
         <div className="mt-4 space-y-3">
           <input
+            ref={fileInputRef}
             type="file"
             accept="application/json,.json"
             className="block w-full text-sm text-muted file:mr-4 file:rounded-xl file:border-0 file:bg-primary/10 file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary"
+            disabled={isBusy}
             onChange={(e) => {
               setFile(e.target.files?.[0] ?? null);
               setConfirmImport(false);
@@ -126,10 +139,15 @@ export function DataBackupPage() {
               setError(null);
             }}
           />
+          <SelectedFileRow
+            fileName={file?.name ?? null}
+            onCancel={clearSelectedFile}
+            disabled={isBusy}
+          />
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
-              disabled={!file || isValidating}
+              disabled={!file || isBusy}
               onClick={handleValidate}
             >
               {isValidating ? 'Validating…' : 'Validate file'}
@@ -151,7 +169,7 @@ export function DataBackupPage() {
           <Button
             variant="outline"
             className="text-danger hover:border-danger/40"
-            disabled={!file || !confirmImport || isImporting}
+            disabled={!file || !confirmImport || isBusy}
             onClick={handleImport}
           >
             <Database className="h-4 w-4" />

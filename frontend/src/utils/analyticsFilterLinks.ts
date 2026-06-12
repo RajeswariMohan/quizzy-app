@@ -1,5 +1,10 @@
 import type { AnalyticsCreatorOption, AnalyticsFilterOptions, AnalyticsQueryFilters } from '@/api/dashboard.api';
-import { mergeAcademicOptions } from '@/utils/academicOptions';
+import {
+  mergeGradeOptions,
+  mergeSubjectOptions,
+  sortAlphabetically,
+  sortGrades,
+} from '@/utils/academicOptions';
 import { formatUserRole } from '@/utils/userRole';
 
 export const ANALYTICS_FILTER_ALL = 'All';
@@ -22,8 +27,9 @@ export function mergeAnalyticsFilterOptions(
 ): AnalyticsFilterOptions {
   return {
     ...options,
-    grades: mergeAcademicOptions(schoolGrades, options.grades),
-    subjects: mergeAcademicOptions(schoolSubjects, options.subjects),
+    grades: mergeGradeOptions(schoolGrades, options.grades),
+    subjects: mergeSubjectOptions(schoolSubjects, options.subjects),
+    topics: sortAlphabetically(options.topics),
   };
 }
 
@@ -34,24 +40,30 @@ export function getLinkedFilterValues(
 ) {
   if (links.length === 0) {
     return {
-      grades: fallback.grades,
-      subjects: fallback.subjects,
-      topics: fallback.topics,
+      grades: sortGrades(fallback.grades, fallback.grades),
+      subjects: sortAlphabetically(fallback.subjects),
+      topics: sortAlphabetically(fallback.topics),
     };
   }
 
   const match = (link: AnalyticsFilterLink, omit: 'grade' | 'subject' | 'topic') => {
     if (omit !== 'grade' && filters.grade && link.grade !== filters.grade) return false;
     if (omit !== 'subject' && filters.subject && link.subject !== filters.subject) return false;
-    if (filters.board && link.board !== filters.board) return false;
     if (omit !== 'topic' && filters.topic && link.topic !== filters.topic) return false;
     return true;
   };
 
   return {
-    grades: [...new Set(links.filter((l) => match(l, 'grade')).map((l) => l.grade))],
-    subjects: [...new Set(links.filter((l) => match(l, 'subject')).map((l) => l.subject))],
-    topics: [...new Set(links.filter((l) => match(l, 'topic')).map((l) => l.topic))],
+    grades: sortGrades(
+      [...new Set(links.filter((l) => match(l, 'grade')).map((l) => l.grade))],
+      fallback.grades,
+    ),
+    subjects: sortAlphabetically([
+      ...new Set(links.filter((l) => match(l, 'subject')).map((l) => l.subject)),
+    ]),
+    topics: sortAlphabetically([
+      ...new Set(links.filter((l) => match(l, 'topic')).map((l) => l.topic)),
+    ]),
   };
 }
 
@@ -101,7 +113,7 @@ export function applyAnalyticsFilterField(
   const value = raw === ANALYTICS_FILTER_ALL ? undefined : raw;
   const next: AnalyticsQueryFilters = { ...filters, [key]: value || undefined };
 
-  if ((key === 'grade' || key === 'subject' || key === 'board') && next.topic) {
+  if ((key === 'grade' || key === 'subject') && next.topic) {
     const topicPool = linksCount === 0 ? allTopics : linkedTopics;
     if (!topicPool.includes(next.topic)) {
       next.topic = undefined;

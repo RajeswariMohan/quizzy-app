@@ -1,20 +1,25 @@
 import { useMemo } from 'react';
 import { X } from 'lucide-react';
+import { AcademicGroupFilterFields } from '@/components/academics/AcademicGroupFilterFields';
 import { FilterPanel } from '@/components/layout/FilterPanel';
 import { Button } from '@/components/ui/Button';
 import { FieldSelect } from '@/components/ui/FieldSelect';
 import { useSchoolAcademics } from '@/hooks/useSchoolAcademics';
+import type { AnalyticsFilterOptions, AnalyticsQueryFilters } from '@/api/dashboard.api';
 import {
   ANALYTICS_FILTER_ALL,
   applyAnalyticsFilterField,
-  buildCreatorLabelByUserId,
-  buildCreatorOptionLabels,
   getLinkedFilterValues,
   mergeAnalyticsFilterOptions,
-  resolveCreatorUserId,
   withAllOption,
 } from '@/utils/analyticsFilterLinks';
-import type { AnalyticsFilterOptions, AnalyticsQueryFilters } from '@/api/dashboard.api';
+import {
+  DEFAULT_ACADEMIC_GROUP_FILTER,
+  FILTER_ALL,
+  parseStoredSectionForFilters,
+  resolveFilterSectionValue,
+  type AcademicGroupFilterValues,
+} from '@/utils/gradeStructure';
 
 interface AnalyticsFilterBarProps {
   options: AnalyticsFilterOptions;
@@ -23,7 +28,7 @@ interface AnalyticsFilterBarProps {
 }
 
 export function AnalyticsFilterBar({ options, filters, onChange }: AnalyticsFilterBarProps) {
-  const { grades: schoolGrades, subjects: schoolSubjects } = useSchoolAcademics();
+  const { grades: schoolGrades, gradeSections, subjects: schoolSubjects } = useSchoolAcademics();
   const mergedOptions = useMemo(
     () => mergeAnalyticsFilterOptions(options, schoolGrades, schoolSubjects),
     [options, schoolGrades, schoolSubjects],
@@ -40,38 +45,57 @@ export function AnalyticsFilterBar({ options, filters, onChange }: AnalyticsFilt
     [links, filters, mergedOptions.grades, mergedOptions.subjects, mergedOptions.topics],
   );
 
+  const filterGrade = filters.grade ?? ANALYTICS_FILTER_ALL;
+
+  const academicGroup = useMemo((): AcademicGroupFilterValues => {
+    if (!filters.grade) return { ...DEFAULT_ACADEMIC_GROUP_FILTER };
+    return parseStoredSectionForFilters(filters.grade, gradeSections, filters.section);
+  }, [filters.grade, filters.section, gradeSections]);
+
   const setField = (key: keyof AnalyticsQueryFilters, raw: string) => {
-    onChange(
-      applyAnalyticsFilterField(
-        filters,
-        key,
-        raw,
-        linkedValues.topics,
-        mergedOptions.topics,
-        links.length,
-      ),
+    const next = applyAnalyticsFilterField(
+      filters,
+      key,
+      raw,
+      linkedValues.topics,
+      mergedOptions.topics,
+      links.length,
     );
+    if (key === 'grade') {
+      delete next.section;
+    }
+    onChange(next);
   };
 
-  const creatorOptions = buildCreatorOptionLabels(mergedOptions.creators);
-  const creatorLabelByUserId = buildCreatorLabelByUserId(mergedOptions.creators);
-  const selectedCreatorLabel = filters.createdByUserId
-    ? creatorLabelByUserId.get(filters.createdByUserId) ?? ANALYTICS_FILTER_ALL
-    : ANALYTICS_FILTER_ALL;
+  const setAcademicGroup = (values: AcademicGroupFilterValues) => {
+    if (!filters.grade) {
+      onChange({ ...filters, section: undefined });
+      return;
+    }
+    const section = resolveFilterSectionValue({
+      grade: filters.grade,
+      gradeSections,
+      department: values.department,
+      sectionLetter: values.sectionLetter,
+      group: values.group,
+    });
+    onChange({ ...filters, section });
+  };
 
   const hasActive =
     !!filters.grade ||
+    !!filters.section ||
     !!filters.subject ||
-    !!filters.board ||
-    !!filters.topic ||
-    !!filters.createdByUserId;
+    !!filters.topic;
 
   return (
     <FilterPanel>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-ink">Slice &amp; dice</p>
-          <p className="text-xs text-muted">Narrow charts and tables by grade, subject, or board</p>
+          <p className="text-xs text-muted">
+            Narrow charts and tables by grade, department/section, subject, or topic
+          </p>
         </div>
         {hasActive && (
           <Button type="button" variant="outline" size="sm" onClick={() => onChange({})}>
@@ -80,35 +104,28 @@ export function AnalyticsFilterBar({ options, filters, onChange }: AnalyticsFilt
           </Button>
         )}
       </div>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {creatorOptions.length > 0 && (
-          <FieldSelect
-            label="Created by"
-            value={selectedCreatorLabel}
-            onChange={(label) => {
-              const userId = resolveCreatorUserId(label, mergedOptions.creators);
-              onChange({ ...filters, createdByUserId: userId });
-            }}
-            options={withAllOption(creatorOptions)}
-          />
-        )}
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <FieldSelect
           label="Grade"
-          value={filters.grade ?? ANALYTICS_FILTER_ALL}
+          value={filterGrade}
           onChange={(v) => setField('grade', v)}
           options={withAllOption(linkedValues.grades)}
         />
+        {filterGrade !== ANALYTICS_FILTER_ALL && filterGrade !== FILTER_ALL && (
+          <div className="sm:col-span-2 lg:col-span-3 xl:col-span-4">
+            <AcademicGroupFilterFields
+              grade={filterGrade}
+              gradeSections={gradeSections}
+              values={academicGroup}
+              onChange={setAcademicGroup}
+            />
+          </div>
+        )}
         <FieldSelect
           label="Subject"
           value={filters.subject ?? ANALYTICS_FILTER_ALL}
           onChange={(v) => setField('subject', v)}
           options={withAllOption(linkedValues.subjects)}
-        />
-        <FieldSelect
-          label="Board"
-          value={filters.board ?? ANALYTICS_FILTER_ALL}
-          onChange={(v) => setField('board', v)}
-          options={withAllOption(mergedOptions.boards)}
         />
         <FieldSelect
           label="Topic"

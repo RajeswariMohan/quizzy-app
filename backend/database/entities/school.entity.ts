@@ -11,6 +11,7 @@ import { Question } from './question.entity';
 import { Quiz } from './quiz.entity';
 import { StudentResponse } from './student-response.entity';
 import { User } from './user.entity';
+import { SchoolSubscriptionTier } from '../enums/school-subscription-tier.enum';
 
 @Entity({ name: 'schools' })
 export class School {
@@ -70,6 +71,18 @@ export class School {
     default: () => "'[]'",
   })
   subjectOptions: string[];
+
+  /** Grade → section names, e.g. { "Class 1": ["Tulip", "Lilly"] }. */
+  @Column({ name: 'grade_section_map', type: 'jsonb', default: () => "'{}'" })
+  gradeSectionMap: Record<string, string[]>;
+
+  @Column({
+    name: 'subscription_tier',
+    type: 'varchar',
+    length: 20,
+    default: SchoolSubscriptionTier.STANDARD,
+  })
+  subscriptionTier: SchoolSubscriptionTier;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

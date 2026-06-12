@@ -25,29 +25,39 @@ export type SchoolUserStatusFilter = 'active' | 'inactive' | 'all';
 export interface SchoolUserRow {
   id: string;
   email: string;
+  username: string | null;
   firstName: string;
   lastName: string;
   role: 'TEACHER' | 'STUDENT' | 'PARENT' | 'SCHOOL_ADMIN';
   grade: string | null;
   section: string | null;
+  parentEmail: string | null;
+  signupSchoolNote: string | null;
   isActive: boolean;
   createdAt: string;
 }
 
+export type SchoolSubscriptionTier = 'BASIC' | 'STANDARD' | 'PREMIUM';
+
 export interface SchoolAcademicConfig {
   grades: string[];
+  gradeSections: Record<string, string[]>;
   sections: string[];
   subjects: string[];
+  subscriptionTier?: SchoolSubscriptionTier;
+  board?: string | null;
 }
 
 export interface CreateSchoolUserPayload {
-  email: string;
+  email?: string;
+  username?: string;
   password: string;
   firstName: string;
   lastName: string;
   role: 'TEACHER' | 'STUDENT' | 'PARENT';
   grade?: string;
   section?: string;
+  parentEmail?: string;
 }
 
 export async function fetchSchoolAdminOverview(): Promise<SchoolAdminOverview> {
@@ -58,10 +68,16 @@ export async function fetchSchoolAdminOverview(): Promise<SchoolAdminOverview> {
 export async function fetchSchoolUsers(options?: {
   role?: 'TEACHER' | 'STUDENT' | 'PARENT';
   status?: SchoolUserStatusFilter;
+  search?: string;
+  grade?: string;
+  section?: string;
 }): Promise<SchoolUserRow[]> {
   const params: Record<string, string> = {};
   if (options?.role) params.role = options.role;
   if (options?.status) params.status = options.status;
+  if (options?.search?.trim()) params.search = options.search.trim();
+  if (options?.grade?.trim()) params.grade = options.grade.trim();
+  if (options?.section?.trim()) params.section = options.section.trim();
   const { data } = await apiClient.get<SchoolUserRow[]>('/school-admin/users', {
     params: Object.keys(params).length > 0 ? params : undefined,
   });
@@ -112,6 +128,7 @@ export interface UpdateSchoolUserPayload {
   role?: 'TEACHER' | 'STUDENT' | 'PARENT';
   grade?: string;
   section?: string;
+  parentEmail?: string;
   password?: string;
 }
 
@@ -129,11 +146,10 @@ export async function fetchSchoolAcademicConfig(): Promise<SchoolAcademicConfig>
 }
 
 export async function updateSchoolAcademicConfig(
-  payload: SchoolAcademicConfig,
+  payload: Pick<SchoolAcademicConfig, 'gradeSections' | 'subjects'>,
 ): Promise<SchoolAcademicConfig> {
   const { data } = await apiClient.patch<SchoolAcademicConfig>('/school-admin/academics', {
-    grades: payload.grades,
-    sections: payload.sections,
+    gradeSections: payload.gradeSections,
     subjects: payload.subjects,
   });
   return data;

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Clock, RefreshCw, Users } from 'lucide-react';
+import { Calendar, Clock, Users } from 'lucide-react';
 import { Card, CardTitle } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
 import {
   Bar,
   BarChart,
@@ -33,13 +32,16 @@ const ROLE_LABELS: Record<string, string> = {
 const ALL_ROLES: UserRole[] = ['STUDENT', 'TEACHER', 'SCHOOL_ADMIN'];
 
 interface EngagementPanelProps {
-  defaultDays?: number;
+  /** Applied engagement filters (typically committed from the page filter bar). */
+  filters: EngagementQuery;
+  /** Increment to re-fetch with the same filters (e.g. page Refresh). */
+  refreshKey?: number;
 }
 
-export function EngagementPanel({ defaultDays = 30 }: EngagementPanelProps) {
+export function EngagementPanel({ filters, refreshKey = 0 }: EngagementPanelProps) {
   const viewerRole = useAuthStore((s) => s.user?.role);
+  const isTeacher = viewerRole === 'TEACHER';
   const [data, setData] = useState<EngagementOverview | null>(null);
-  const [filters, setFilters] = useState<EngagementQuery>({ days: defaultDays });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const filterVersion = useSchoolFilterStore((s) => s.filterVersion);
@@ -55,32 +57,47 @@ export function EngagementPanel({ defaultDays = 30 }: EngagementPanelProps) {
         setData(null);
       })
       .finally(() => setIsLoading(false));
-  }, [filters, filterVersion]);
+  }, [filters, filterVersion, refreshKey]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   const allowedRoles = useMemo<UserRole[]>(() => {
-    if (viewerRole === 'TEACHER') {
-      return ['STUDENT', 'TEACHER'];
+    if (isTeacher) {
+      return ['TEACHER'];
     }
     return ALL_ROLES;
-  }, [viewerRole]);
+  }, [isTeacher]);
 
   const visibleByRole = useMemo(
     () => (data?.byRole ?? []).filter((row) => allowedRoles.includes(row.role)),
     [data?.byRole, allowedRoles],
   );
 
-  const visibleUsers = useMemo(
-    () => (data?.users ?? []).filter((row) => allowedRoles.includes(row.role)),
-    [data?.users, allowedRoles],
-  );
+  const visibleUsers = useMemo(() => data?.users ?? [], [data?.users]);
 
-  const totalSeconds = visibleByRole.reduce((sum, row) => sum + row.totalActiveSeconds, 0);
+  const totalSeconds = isTeacher
+    ? (visibleUsers[0]?.totalActiveSeconds ?? 0)
+    : visibleByRole.reduce((sum, row) => sum + row.totalActiveSeconds, 0);
 
   const roleCards = useMemo(() => {
+    if (isTeacher) {
+      const self = visibleUsers[0];
+      return [
+        {
+          role: 'TEACHER' as const,
+          label: 'My active time',
+          totalActiveSeconds: self?.totalActiveSeconds ?? 0,
+          activeUsers: self ? 1 : 0,
+          sessionCount: self?.sessionCount ?? 0,
+          avgSessionSeconds:
+            self && self.sessionCount > 0
+              ? Math.round(self.totalActiveSeconds / self.sessionCount)
+              : 0,
+        },
+      ];
+    }
     const byRoleMap = new Map(visibleByRole.map((r) => [r.role, r]));
     const roles =
       filters.role && allowedRoles.includes(filters.role)
@@ -97,7 +114,7 @@ export function EngagementPanel({ defaultDays = 30 }: EngagementPanelProps) {
         avgSessionSeconds: row?.avgSessionSeconds ?? 0,
       };
     });
-  }, [visibleByRole, filters.role, allowedRoles]);
+  }, [visibleByRole, filters.role, allowedRoles, isTeacher, visibleUsers]);
 
   const trendChartData = useMemo(
     () =>
@@ -111,51 +128,27 @@ export function EngagementPanel({ defaultDays = 30 }: EngagementPanelProps) {
   const hasSessionData = totalSeconds > 0 || visibleUsers.length > 0;
 
   const usersPagination = useClientPagination(visibleUsers, {
-    resetKey: `${filters.days ?? defaultDays}|${filters.role ?? ''}|${visibleUsers.length}`,
+    resetKey: `${filters.dateFrom ?? ''}|${filters.dateTo ?? ''}|${filters.role ?? ''}|${visibleUsers.length}`,
   });
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+      <div className="flex min-w-0 items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <Calendar className="h-5 w-5" aria-hidden />
+        </div>
+        <div className="min-w-0">
           <h2 className="text-lg font-semibold text-ink">Engagement (session time)</h2>
           <p className="text-sm text-muted">
-            Active portal time for role-relevant users in your scope
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            className="rounded-xl border border-gray-200 px-3 py-2 text-sm"
-            value={filters.days ?? defaultDays}
-            onChange={(e) =>
-              setFilters((f) => ({ ...f, days: Number(e.target.value) }))
-            }
-          >
-            <option value={7}>Last 7 days</option>
-            <option value={14}>Last 14 days</option>
-            <option value={30}>Last 30 days</option>
-            <option value={90}>Last 90 days</option>
-          </select>
-          <select
-            className="rounded-xl border border-gray-200 px-3 py-2 text-sm"
-            value={filters.role ?? ''}
-            onChange={(e) =>
-              setFilters((f) => ({
-                ...f,
-                role: (e.target.value || undefined) as UserRole | undefined,
-              }))
-            }
-          >
-            <option value="">All roles</option>
-            <option value="STUDENT">Students</option>
-            <option value="TEACHER">Teachers</option>
-            {allowedRoles.includes('SCHOOL_ADMIN') && (
-              <option value="SCHOOL_ADMIN">School admins</option>
+            {isTeacher
+              ? 'Your portal session time in the selected date range'
+              : 'Active portal time for role-relevant users in your scope'}
+            {data && (
+              <span className="mt-1 block text-xs">
+                {data.dateFrom} – {data.dateTo}
+              </span>
             )}
-          </select>
-          <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-          </Button>
+          </p>
         </div>
       </div>
 
@@ -169,27 +162,31 @@ export function EngagementPanel({ defaultDays = 30 }: EngagementPanelProps) {
         <Card className="!p-8 text-center text-sm text-muted">Loading engagement…</Card>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Card className="!p-4">
-              <p className="flex items-center gap-1 text-sm text-muted">
-                <Clock className="h-4 w-4" />
-                Total active time
-              </p>
-              <p className="text-2xl font-bold text-primary">
-                {formatActiveTime(totalSeconds)}
-              </p>
-              {data && (
-                <p className="mt-1 text-xs text-muted">
-                  Since {formatDateTime(data.since).split(',')[0]}
+          <div
+            className={`grid gap-4 ${isTeacher ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-4'}`}
+          >
+            {!isTeacher && (
+              <Card className="!p-4">
+                <p className="flex items-center gap-1 text-sm text-muted">
+                  <Clock className="h-4 w-4" />
+                  Total active time
                 </p>
-              )}
-            </Card>
+                <p className="text-2xl font-bold text-primary">
+                  {formatActiveTime(totalSeconds)}
+                </p>
+                {data && (
+                  <p className="mt-1 text-xs text-muted">
+                    {data.dateFrom} – {data.dateTo}
+                  </p>
+                )}
+              </Card>
+            )}
             {roleCards.map((row) => (
               <Card key={row.role} className="!p-4">
                 <p className="text-sm text-muted">{row.label}</p>
                 <p className="text-xl font-bold">{formatActiveTime(row.totalActiveSeconds)}</p>
                 <p className="text-xs text-muted">
-                  {row.activeUsers} users · {row.sessionCount} sessions
+                  {row.sessionCount} sessions
                   {row.sessionCount > 0
                     ? ` · avg ${formatActiveTime(row.avgSessionSeconds)}`
                     : ''}
@@ -202,14 +199,14 @@ export function EngagementPanel({ defaultDays = 30 }: EngagementPanelProps) {
             <Card className="!p-6 text-center">
               <p className="font-medium text-ink">No session data in this period</p>
               <p className="mt-2 text-sm text-muted">
-                Session time is recorded when users sign in and use the portal. Ask staff,
-                students, and parents to log in again after the latest update — activity will
-                appear here within a few minutes.
+                {isTeacher
+                  ? 'Sign in and use the portal during this range — your session time will appear here.'
+                  : 'Session time is recorded when users sign in and use the portal. Activity will appear here within a few minutes.'}
               </p>
             </Card>
           )}
 
-          {trendChartData.length > 0 && (
+          {!isTeacher && trendChartData.length > 0 && (
             <Card>
               <CardTitle>Daily active time (minutes)</CardTitle>
               <div className="mt-4 h-56">
@@ -237,7 +234,7 @@ export function EngagementPanel({ defaultDays = 30 }: EngagementPanelProps) {
               <div className="border-b border-gray-100 px-4 py-3">
                 <CardTitle className="flex items-center gap-2">
                   <Users className="h-5 w-5" />
-                  User session time
+                  {isTeacher ? 'My session time' : 'User session time'}
                 </CardTitle>
               </div>
               <div className="overflow-x-auto">
@@ -273,7 +270,7 @@ export function EngagementPanel({ defaultDays = 30 }: EngagementPanelProps) {
                   </tbody>
                 </table>
               </div>
-              {usersPagination.showPagination && (
+              {!isLoading && usersPagination.totalItems > 0 && (
                 <TablePagination
                   page={usersPagination.page}
                   totalPages={usersPagination.totalPages}

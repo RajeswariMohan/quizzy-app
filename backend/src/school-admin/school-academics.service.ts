@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { School } from '@database/entities/school.entity';
+import { SchoolSubscriptionTier } from '@database/enums/school-subscription-tier.enum';
 import {
   DEFAULT_GRADE_OPTIONS,
   DEFAULT_SECTION_OPTIONS,
@@ -10,8 +11,14 @@ import {
 
 export interface SchoolAcademicOptionsDto {
   grades: string[];
+  /** Sections per grade, e.g. { "Class 1": ["Tulip", "Lilly"] } */
+  gradeSections: Record<string, string[]>;
+  /** Flat union of all sections (backward compatibility) */
   sections: string[];
   subjects: string[];
+  subscriptionTier: SchoolSubscriptionTier;
+  /** Curriculum board configured for this school (e.g. CBSE). */
+  board: string | null;
 }
 
 export function normalizeOptionList(values: string[]): string[] {
@@ -28,6 +35,20 @@ export function normalizeOptionList(values: string[]): string[] {
   return normalized;
 }
 
+export function normalizeGradeSectionMap(
+  raw: Record<string, string[]>,
+): Record<string, string[]> {
+  const map: Record<string, string[]> = {};
+  for (const [grade, sections] of Object.entries(raw)) {
+    const gradeLabel = grade.trim();
+    if (!gradeLabel) continue;
+    const normalizedSections = normalizeOptionList(sections ?? []);
+    if (normalizedSections.length === 0) continue;
+    map[gradeLabel] = normalizedSections;
+  }
+  return map;
+}
+
 @Injectable()
 export class SchoolAcademicsService {
   constructor(
@@ -36,11 +57,40 @@ export class SchoolAcademicsService {
   ) {}
 
   resolveGradeOptions(school: School): string[] {
+    const fromMap = Object.keys(this.resolveGradeSectionMap(school));
+    if (fromMap.length > 0) return fromMap;
     const configured = normalizeOptionList(school.gradeOptions ?? []);
     return configured.length > 0 ? configured : [...DEFAULT_GRADE_OPTIONS];
   }
 
+  resolveGradeSectionMap(school: School): Record<string, string[]> {
+    const configured = normalizeGradeSectionMap(school.gradeSectionMap ?? {});
+    if (Object.keys(configured).length > 0) {
+      return configured;
+    }
+
+    const grades = normalizeOptionList(school.gradeOptions ?? []);
+    const sections = this.resolveFlatSectionOptions(school);
+    if (grades.length === 0) {
+      return Object.fromEntries(
+        DEFAULT_GRADE_OPTIONS.map((grade) => [grade, [...DEFAULT_SECTION_OPTIONS]]),
+      );
+    }
+    return Object.fromEntries(grades.map((grade) => [grade, [...sections]]));
+  }
+
+  resolveSectionsForGrade(school: School, grade: string): string[] {
+    const map = this.resolveGradeSectionMap(school);
+    return map[grade.trim()] ?? [];
+  }
+
   resolveSectionOptions(school: School): string[] {
+    const map = this.resolveGradeSectionMap(school);
+    const union = normalizeOptionList(Object.values(map).flat());
+    return union.length > 0 ? union : this.resolveFlatSectionOptions(school);
+  }
+
+  private resolveFlatSectionOptions(school: School): string[] {
     const configured = normalizeOptionList(school.sectionOptions ?? []);
     return configured.length > 0 ? configured : [...DEFAULT_SECTION_OPTIONS];
   }
@@ -50,12 +100,34 @@ export class SchoolAcademicsService {
     return configured.length > 0 ? configured : [...DEFAULT_SUBJECT_OPTIONS];
   }
 
+  resolveSubscriptionTier(school: School): SchoolSubscriptionTier {
+    const tier = school.subscriptionTier;
+    if (
+      tier === SchoolSubscriptionTier.BASIC ||
+      tier === SchoolSubscriptionTier.STANDARD ||
+      tier === SchoolSubscriptionTier.PREMIUM
+    ) {
+      return tier;
+    }
+    return SchoolSubscriptionTier.STANDARD;
+  }
+
   toDto(school: School): SchoolAcademicOptionsDto {
+    const gradeSections = this.resolveGradeSectionMap(school);
     return {
-      grades: this.resolveGradeOptions(school),
+      grades: Object.keys(gradeSections),
+      gradeSections,
       sections: this.resolveSectionOptions(school),
       subjects: this.resolveSubjectOptions(school),
+      subscriptionTier: this.resolveSubscriptionTier(school),
+      board: school.board ?? null,
     };
+  }
+
+  syncLegacyOptionsFromMap(school: School, map: Record<string, string[]>): void {
+    school.gradeSectionMap = map;
+    school.gradeOptions = Object.keys(map);
+    school.sectionOptions = normalizeOptionList(Object.values(map).flat());
   }
 
   async getForSchoolId(schoolId: string): Promise<SchoolAcademicOptionsDto> {
@@ -77,9 +149,19 @@ export class SchoolAcademicsService {
     }
   }
 
-  assertSectionAllowed(school: School, section: string): void {
+  assertSectionAllowed(school: School, section: string, grade?: string): void {
+    const trimmedSection = section.trim();
+    if (grade?.trim()) {
+      const forGrade = this.resolveSectionsForGrade(school, grade);
+      if (!forGrade.includes(trimmedSection)) {
+        throw new BadRequestException(
+          `Section must be one of the sections configured for ${grade.trim()}`,
+        );
+      }
+      return;
+    }
     const options = this.resolveSectionOptions(school);
-    if (!options.includes(section.trim())) {
+    if (!options.includes(trimmedSection)) {
       throw new BadRequestException(
         `Section must be one of your school's configured options`,
       );

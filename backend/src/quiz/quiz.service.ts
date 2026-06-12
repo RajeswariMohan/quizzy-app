@@ -1,6 +1,16 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, ObjectLiteral, Repository, SelectQueryBuilder } from 'typeorm';
+import {
+  Between,
+  FindOperator,
+  In,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  ObjectLiteral,
+  Repository,
+  SelectQueryBuilder,
+} from 'typeorm';
+import type { FindOptionsWhere } from 'typeorm';
 import { Class } from '@database/entities/class.entity';
 import { Quiz } from '@database/entities/quiz.entity';
 import { StudentResponse } from '@database/entities/student-response.entity';
@@ -11,16 +21,21 @@ import { UserRole } from '@database/enums/user-role.enum';
 import { TenantContext } from '../auth/interfaces/tenant-context.interface';
 import { TenantContextService } from '../auth/services/tenant-context.service';
 import { SchoolAcademicsService } from '../school-admin/school-academics.service';
+import { SchoolFeatureService } from '../school/school-feature.service';
 import { CreateQuizDto } from './dto/create-quiz.dto';
 import { UpdateQuizDto } from './dto/update-quiz.dto';
 import { DashboardAnalyticsQueryDto } from './dto/dashboard-analytics-query.dto';
 import { PublishQuizDto } from './dto/publish-quiz.dto';
+import { QuizAcademicSuggestionsQueryDto } from './dto/quiz-academic-suggestions-query.dto';
 import {
   isQuizVisibleToStudent,
   normalizeAudienceTargets,
   QuizAudienceTarget,
 } from './quiz-audience.util';
+import { assertQuizManageAccess } from './quiz-access.util';
+import { applyUserSectionFilter } from '../school-admin/academic-section-filter.util';
 import { mapQuizCreator } from './quiz-creator.util';
+import { hasQuizTopic, normalizeQuizTopic } from './quiz-topic.util';
 
 @Injectable()
 export class QuizService {
@@ -35,10 +50,12 @@ export class QuizService {
     private readonly usersRepository: Repository<User>,
     private readonly tenantContextService: TenantContextService,
     private readonly schoolAcademicsService: SchoolAcademicsService,
+    private readonly schoolFeatureService: SchoolFeatureService,
   ) {}
 
   async create(tenant: TenantContext, dto: CreateQuizDto): Promise<Quiz> {
     const schoolId = this.tenantContextService.resolveSchoolIdForQuery(tenant);
+    await this.schoolFeatureService.assertFeature(schoolId, 'teacherQuizCreationEnabled');
 
     if (!dto.grade && !dto.classId) {
       throw new BadRequestException('grade or classId is required');
@@ -60,8 +77,8 @@ export class QuizService {
       createdByUserId: tenant.userId,
       title: dto.title,
       description: dto.description ?? null,
-      subject: dto.subject ?? null,
-      topic: dto.topic ?? null,
+      subject: dto.subject?.trim() || null,
+      topic: normalizeQuizTopic(dto.topic),
       board: dto.board ?? null,
       grade: dto.grade ?? null,
       timeLimitMinutes: dto.timeLimitMinutes ?? null,
@@ -76,22 +93,24 @@ export class QuizService {
     const schoolIds = this.tenantContextService.resolveSchoolIdsForQuery(tenant);
     const multiSchool = schoolIds.length > 1;
 
-    const where: {
-      schoolId: ReturnType<typeof In>;
-      createdByUserId?: string;
-      grade?: string;
-      subject?: string;
-      board?: string;
-      topic?: string;
-    } = { schoolId: In(schoolIds) };
+    const where: FindOptionsWhere<Quiz> = { schoolId: In(schoolIds) };
 
-    if (filters.createdByUserId?.trim()) {
-      where.createdByUserId = filters.createdByUserId.trim();
+    const createdByUserId = this.resolveListCreatedByUserId(tenant, filters);
+    if (createdByUserId) {
+      where.createdByUserId = createdByUserId;
+    }
+
+    const createdAtFilter = this.resolveCreatedAtFilter(filters);
+    if (createdAtFilter) {
+      where.createdAt = createdAtFilter;
     }
     if (filters.grade?.trim()) where.grade = filters.grade.trim();
     if (filters.subject?.trim()) where.subject = filters.subject.trim();
     if (filters.board?.trim()) where.board = filters.board.trim();
     if (filters.topic?.trim()) where.topic = filters.topic.trim();
+    if (filters.status) {
+      where.status = filters.status;
+    }
 
     const quizzes = await this.quizRepository.find({
       where,
@@ -122,6 +141,35 @@ export class QuizService {
     return quizzes.map((quiz) => this.toQuizListItem(quiz, multiSchool, avgByQuiz.get(quiz.id) ?? null));
   }
 
+  /** Distinct quiz topics for the school (all creators), for create/edit form suggestions. */
+  async listTopicSuggestionsForSchool(
+    tenant: TenantContext,
+    query: QuizAcademicSuggestionsQueryDto,
+  ): Promise<{ topics: string[] }> {
+    const schoolIds = this.tenantContextService.resolveSchoolIdsForQuery(tenant);
+    const subject = query.subject.trim();
+
+    const qb = this.quizRepository
+      .createQueryBuilder('q')
+      .select('DISTINCT TRIM(q.topic)', 'value')
+      .where('q.school_id IN (:...schoolIds)', { schoolIds })
+      .andWhere('q.subject = :subject', { subject })
+      .andWhere('q.topic IS NOT NULL')
+      .andWhere("TRIM(q.topic) <> ''");
+
+    const grade = query.grade?.trim();
+    if (grade) {
+      qb.andWhere('q.grade = :grade', { grade });
+    }
+
+    const rows = await qb.orderBy('value', 'ASC').getRawMany<{ value: string }>();
+    const topics = rows
+      .map((row) => row.value?.trim())
+      .filter((value): value is string => !!value);
+
+    return { topics };
+  }
+
   async update(tenant: TenantContext, quizId: string, dto: UpdateQuizDto) {
     const schoolId = this.tenantContextService.resolveSchoolIdForQuery(tenant);
     const quiz = await this.quizRepository.findOne({
@@ -132,6 +180,8 @@ export class QuizService {
     if (!quiz) {
       throw new NotFoundException('Quiz not found');
     }
+
+    assertQuizManageAccess(tenant, quiz);
 
     await this.assertQuizAcademicsForSchool(
       schoolId,
@@ -146,8 +196,8 @@ export class QuizService {
 
     if (dto.title !== undefined) quiz.title = dto.title;
     if (dto.description !== undefined) quiz.description = dto.description ?? null;
-    if (dto.subject !== undefined) quiz.subject = dto.subject ?? null;
-    if (dto.topic !== undefined) quiz.topic = dto.topic ?? null;
+    if (dto.subject !== undefined) quiz.subject = dto.subject?.trim() || null;
+    if (dto.topic !== undefined) quiz.topic = normalizeQuizTopic(dto.topic);
     if (dto.board !== undefined) quiz.board = dto.board ?? null;
     if (dto.grade !== undefined) {
       quiz.grade = dto.grade ?? null;
@@ -192,6 +242,8 @@ export class QuizService {
       throw new NotFoundException('Quiz not found');
     }
 
+    assertQuizManageAccess(tenant, quiz);
+
     if (quiz.status !== QuizStatus.PUBLISHED) {
       throw new BadRequestException('Only published quizzes can be unpublished');
     }
@@ -210,6 +262,7 @@ export class QuizService {
 
   async publish(tenant: TenantContext, quizId: string, dto: PublishQuizDto) {
     const schoolId = this.tenantContextService.resolveSchoolIdForQuery(tenant);
+    await this.schoolFeatureService.assertFeature(schoolId, 'teacherQuizCreationEnabled');
     const quiz = await this.quizRepository.findOne({
       where: { id: quizId, schoolId },
       relations: ['questions', 'class'],
@@ -219,6 +272,8 @@ export class QuizService {
       throw new NotFoundException('Quiz not found');
     }
 
+    assertQuizManageAccess(tenant, quiz);
+
     if (quiz.status === QuizStatus.PUBLISHED) {
       throw new BadRequestException('Quiz is already published');
     }
@@ -227,10 +282,19 @@ export class QuizService {
       throw new BadRequestException('Add at least one question before publishing');
     }
 
+    if (!hasQuizTopic(quiz.topic)) {
+      throw new BadRequestException(
+        'Topic is required before publishing. Add a short topic name in quiz details (not the quiz title).',
+      );
+    }
+
     const { scope, targets } = await this.resolvePublishAudience(schoolId, dto);
 
     quiz.audienceScope = scope;
-    quiz.audienceTargets = targets;
+    quiz.audienceTargets = targets.map((t) => ({
+      grade: t.grade,
+      section: t.section ?? '',
+    }));
     quiz.status = QuizStatus.PUBLISHED;
     quiz.publishedAt = new Date();
     await this.quizRepository.save(quiz);
@@ -250,16 +314,29 @@ export class QuizService {
     filters: DashboardAnalyticsQueryDto = {},
   ) {
     const schoolIds = this.tenantContextService.resolveSchoolIdsForQuery(tenant);
+    const scopedFilters = this.mergeDashboardCreatorScope(tenant, filters);
+    const creatorUserId = scopedFilters.createdByUserId?.trim();
+    const hasScopedCreator = !!creatorUserId;
     const creatorRoles = this.resolveCreatorRolesForViewer(tenant);
     const filterOptions = await this.loadAnalyticsFilterOptions(
       schoolIds,
       creatorRoles,
+      creatorUserId,
     );
-    const hasFilters = this.hasAnalyticsFilters(filters);
+    const hasFilters = this.hasAnalyticsFilters(scopedFilters);
 
     let totalStudents: number;
-    if (hasFilters) {
-      const studentRow = await this.buildFilteredResponseQuery(schoolIds, filters)
+    if (hasScopedCreator) {
+      totalStudents = await this.countStudentsInPublishedAudience(
+        schoolIds,
+        creatorUserId!,
+        scopedFilters,
+      );
+    } else if (hasFilters) {
+      const studentRow = await this.buildFilteredResponseQuery(
+        schoolIds,
+        scopedFilters,
+      )
         .select('COUNT(DISTINCT r.student_id)', 'cnt')
         .getRawOne<{ cnt: string }>();
       totalStudents = Number(studentRow?.cnt ?? 0);
@@ -278,24 +355,24 @@ export class QuizService {
       board?: string;
       topic?: string;
     } = { schoolId: In(schoolIds), status: QuizStatus.PUBLISHED };
-    if (filters.createdByUserId?.trim()) {
-      quizWhere.createdByUserId = filters.createdByUserId.trim();
+    if (creatorUserId) {
+      quizWhere.createdByUserId = creatorUserId;
     }
-    if (filters.grade?.trim()) quizWhere.grade = filters.grade.trim();
-    if (filters.subject?.trim()) quizWhere.subject = filters.subject.trim();
-    if (filters.board?.trim()) quizWhere.board = filters.board.trim();
-    if (filters.topic?.trim()) quizWhere.topic = filters.topic.trim();
+    if (scopedFilters.grade?.trim()) quizWhere.grade = scopedFilters.grade.trim();
+    if (scopedFilters.subject?.trim()) quizWhere.subject = scopedFilters.subject.trim();
+    if (scopedFilters.board?.trim()) quizWhere.board = scopedFilters.board.trim();
+    if (scopedFilters.topic?.trim()) quizWhere.topic = scopedFilters.topic.trim();
 
     const quizzesConducted = await this.quizRepository.count({ where: quizWhere });
 
-    const avgRow = await this.buildFilteredResponseQuery(schoolIds, filters)
+    const avgRow = await this.buildFilteredResponseQuery(schoolIds, scopedFilters)
       .select(
         'ROUND(100.0 * SUM(CASE WHEN r.is_correct THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 0)',
         'avgAccuracy',
       )
       .getRawOne<{ avgAccuracy: string | null }>();
 
-    const topScoreRow = await this.buildFilteredResponseQuery(schoolIds, filters)
+    const topScoreRow = await this.buildFilteredResponseQuery(schoolIds, scopedFilters)
       .select(
         'ROUND(100.0 * SUM(CASE WHEN r.is_correct THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 0)',
         'score',
@@ -306,8 +383,9 @@ export class QuizService {
       .limit(1)
       .getRawOne<{ score: string }>();
 
-    const recentQuizzes = await this.listForTeacher(tenant, filters);
+    const recentQuizzes = await this.listForTeacher(tenant, scopedFilters);
 
+    const rankByQuizResponses = hasScopedCreator || hasFilters;
     const topStudentQb = this.usersRepository
       .createQueryBuilder('u')
       .select('u.id', 'userId')
@@ -320,11 +398,19 @@ export class QuizService {
       .andWhere('u.role = :role', { role: UserRole.STUDENT })
       .andWhere('u.is_active = true');
 
-    if (hasFilters) {
+    if (rankByQuizResponses) {
       topStudentQb
         .innerJoin(StudentResponse, 'r', 'r.student_id = u.id AND r.school_id = u.school_id')
         .innerJoin(Quiz, 'quiz', 'quiz.id = r.quiz_id');
-      this.applyAnalyticsQuizFilters(topStudentQb, 'quiz', filters);
+      this.applyAnalyticsQuizFilters(topStudentQb, 'quiz', scopedFilters);
+      if (scopedFilters.section?.trim()) {
+        applyUserSectionFilter(
+          topStudentQb,
+          'u',
+          scopedFilters.section.trim(),
+          scopedFilters.grade?.trim(),
+        );
+      }
     } else {
       topStudentQb.leftJoin(
         StudentResponse,
@@ -335,7 +421,7 @@ export class QuizService {
 
     const topStudentRows = await topStudentQb
       .groupBy('u.id, u.display_name, u.first_name, u.last_name')
-      .orderBy('u.xp_points', 'DESC')
+      .orderBy(rankByQuizResponses ? 'score' : 'u.xp_points', 'DESC')
       .limit(5)
       .getRawMany<{ userId: string; name: string; score: string | null }>();
 
@@ -353,23 +439,17 @@ export class QuizService {
         value: q.avgAccuracy ?? 0,
       }));
 
-    const topicQb = this.buildFilteredResponseQuery(schoolIds, filters)
-      .select('COALESCE(quiz.topic, quiz.subject, \'General\')', 'topic')
-      .addSelect(
-        'ROUND(100.0 * SUM(CASE WHEN r.is_correct THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 0)',
-        'percentage',
-      )
-      .groupBy('quiz.topic, quiz.subject')
-      .orderBy('percentage', 'DESC')
-      .limit(5);
-
-    const topicRows = await topicQb.getRawMany<{ topic: string; percentage: string }>();
-
-    const creatorPerformance = await this.loadCreatorPerformance(
+    const subjectRows = await this.loadMasteryBreakdown(
       schoolIds,
-      filters,
-      creatorRoles,
+      scopedFilters,
+      'subject',
     );
+    const topicRows = await this.loadMasteryBreakdown(schoolIds, scopedFilters, 'topic');
+
+    const creatorPerformance =
+      tenant.role === UserRole.TEACHER
+        ? []
+        : await this.loadCreatorPerformance(schoolIds, scopedFilters, creatorRoles);
 
     return {
       schoolFilter: {
@@ -378,11 +458,12 @@ export class QuizService {
       },
       filterOptions,
       appliedFilters: {
-        grade: filters.grade?.trim() || null,
-        subject: filters.subject?.trim() || null,
-        board: filters.board?.trim() || null,
-        topic: filters.topic?.trim() || null,
-        createdByUserId: filters.createdByUserId?.trim() || null,
+        grade: scopedFilters.grade?.trim() || null,
+        section: scopedFilters.section?.trim() || null,
+        subject: scopedFilters.subject?.trim() || null,
+        board: scopedFilters.board?.trim() || null,
+        topic: scopedFilters.topic?.trim() || null,
+        createdByUserId: scopedFilters.createdByUserId?.trim() || null,
       },
       stats: {
         totalStudents,
@@ -394,10 +475,8 @@ export class QuizService {
       recentQuizzes: recentQuizzes.slice(0, 8),
       topStudents: topWithScores,
       quizPerformance,
-      topicPerformance: topicRows.map((t) => ({
-        topic: t.topic,
-        percentage: Number(t.percentage),
-      })),
+      subjectPerformance: subjectRows,
+      topicPerformance: topicRows,
       creatorPerformance,
     };
   }
@@ -418,7 +497,120 @@ export class QuizService {
       throw new NotFoundException('Quiz not found');
     }
 
+    assertQuizManageAccess(tenant, quiz);
+
     return quiz;
+  }
+
+  private resolveListCreatedByUserId(
+    tenant: TenantContext,
+    filters: DashboardAnalyticsQueryDto,
+  ): string | undefined {
+    if (tenant.role === UserRole.TEACHER || tenant.role === UserRole.SUPER_ADMIN) {
+      return tenant.userId;
+    }
+    const requested = filters.createdByUserId?.trim();
+    return requested || undefined;
+  }
+
+  private mergeDashboardCreatorScope(
+    tenant: TenantContext,
+    filters: DashboardAnalyticsQueryDto,
+  ): DashboardAnalyticsQueryDto {
+    const createdByUserId = this.resolveListCreatedByUserId(tenant, filters);
+    if (!createdByUserId) {
+      return filters;
+    }
+    return { ...filters, createdByUserId };
+  }
+
+  private async countStudentsInPublishedAudience(
+    schoolIds: string[],
+    creatorUserId: string,
+    filters: DashboardAnalyticsQueryDto,
+  ): Promise<number> {
+    const quizzes = await this.loadCreatorPublishedQuizzes(
+      schoolIds,
+      creatorUserId,
+      filters,
+    );
+    if (quizzes.length === 0) {
+      return 0;
+    }
+
+    const studentQb = this.usersRepository
+      .createQueryBuilder('u')
+      .select(['u.id', 'u.grade', 'u.section'])
+      .where('u.school_id IN (:...schoolIds)', { schoolIds })
+      .andWhere('u.role = :role', { role: UserRole.STUDENT })
+      .andWhere('u.is_active = true');
+
+    if (filters.grade?.trim()) {
+      studentQb.andWhere('u.grade = :grade', { grade: filters.grade.trim() });
+    }
+    if (filters.section?.trim()) {
+      applyUserSectionFilter(
+        studentQb,
+        'u',
+        filters.section.trim(),
+        filters.grade?.trim(),
+      );
+    }
+
+    const students = await studentQb.getMany();
+
+    return students.filter((student) =>
+      quizzes.some((quiz) =>
+        isQuizVisibleToStudent(
+          quiz.audienceScope,
+          normalizeAudienceTargets(quiz.audienceTargets),
+          student.grade,
+          student.section,
+        ),
+      ),
+    ).length;
+  }
+
+  private async loadCreatorPublishedQuizzes(
+    schoolIds: string[],
+    creatorUserId: string,
+    filters: DashboardAnalyticsQueryDto,
+  ): Promise<Pick<Quiz, 'audienceScope' | 'audienceTargets'>[]> {
+    const where: FindOptionsWhere<Quiz> = {
+      schoolId: In(schoolIds),
+      status: QuizStatus.PUBLISHED,
+      createdByUserId: creatorUserId,
+    };
+    if (filters.grade?.trim()) where.grade = filters.grade.trim();
+    if (filters.subject?.trim()) where.subject = filters.subject.trim();
+    if (filters.board?.trim()) where.board = filters.board.trim();
+    if (filters.topic?.trim()) where.topic = filters.topic.trim();
+
+    return this.quizRepository.find({
+      where,
+      select: ['audienceScope', 'audienceTargets'],
+    });
+  }
+
+  private resolveCreatedAtFilter(
+    filters: DashboardAnalyticsQueryDto,
+  ): FindOperator<Date> | undefined {
+    const from = filters.dateFrom
+      ? new Date(`${filters.dateFrom}T00:00:00.000`)
+      : undefined;
+    const to = filters.dateTo
+      ? new Date(`${filters.dateTo}T23:59:59.999`)
+      : undefined;
+    if (from && to) {
+      return Between(from, to);
+    }
+    if (from) {
+      return MoreThanOrEqual(from);
+    }
+    if (to) {
+      return LessThanOrEqual(to);
+    }
+    return undefined;
   }
 
   private async resolveClassForGrade(
@@ -448,6 +640,60 @@ export class QuizService {
     return saved.id;
   }
 
+  private async loadMasteryBreakdown(
+    schoolIds: string[],
+    filters: DashboardAnalyticsQueryDto,
+    dimension: 'subject' | 'topic',
+  ): Promise<
+    Array<{
+      subject?: string;
+      topic?: string;
+      score: number;
+      answeredCount: number;
+      correctCount: number;
+    }>
+  > {
+    const labelExpr =
+      dimension === 'subject'
+        ? "COALESCE(NULLIF(TRIM(quiz.subject), ''), 'General')"
+        : "COALESCE(NULLIF(TRIM(quiz.topic), ''), 'General')";
+    const alias = dimension;
+
+    const rows = await this.buildFilteredResponseQuery(schoolIds, filters)
+      .select(labelExpr, alias)
+      .addSelect('COUNT(*)', 'answeredCount')
+      .addSelect(
+        'SUM(CASE WHEN r.is_correct THEN 1 ELSE 0 END)',
+        'correctCount',
+      )
+      .addSelect(
+        'ROUND(100.0 * SUM(CASE WHEN r.is_correct THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 0)',
+        'score',
+      )
+      .groupBy(labelExpr)
+      .orderBy('COUNT(*)', 'DESC')
+      .limit(8)
+      .getRawMany<{
+        subject?: string;
+        topic?: string;
+        answeredCount: string;
+        correctCount: string;
+        score: string;
+      }>();
+
+    return rows.map((row) => {
+      const label = String(row[alias] ?? 'General');
+      const payload = {
+        score: Number(row.score),
+        answeredCount: Number(row.answeredCount),
+        correctCount: Number(row.correctCount),
+      };
+      return dimension === 'subject'
+        ? { subject: label, ...payload }
+        : { topic: label, ...payload };
+    });
+  }
+
   private buildFilteredResponseQuery(
     schoolIds: string[],
     filters: DashboardAnalyticsQueryDto,
@@ -456,6 +702,15 @@ export class QuizService {
       .createQueryBuilder('r')
       .innerJoin(Quiz, 'quiz', 'quiz.id = r.quiz_id')
       .where('r.school_id IN (:...schoolIds)', { schoolIds });
+    if (filters.section?.trim()) {
+      qb.innerJoin(User, 'filter_student', 'filter_student.id = r.student_id');
+      applyUserSectionFilter(
+        qb,
+        'filter_student',
+        filters.section.trim(),
+        filters.grade?.trim(),
+      );
+    }
     this.applyAnalyticsQuizFilters(qb, 'quiz', filters);
     return qb;
   }
@@ -488,43 +743,59 @@ export class QuizService {
     schoolId: string,
     dto: PublishQuizDto,
   ): Promise<{ scope: QuizAudienceScope; targets: QuizAudienceTarget[] }> {
+    const options = await this.schoolAcademicsService.getForSchoolId(schoolId);
+    await this.schoolFeatureService.assertPublishScopeAllowed(schoolId, dto.audienceScope);
+
     if (dto.audienceScope === QuizAudienceScope.SCHOOL) {
       return { scope: QuizAudienceScope.SCHOOL, targets: [] };
     }
 
-    const targets = normalizeAudienceTargets(dto.targets);
-    if (targets.length === 0) {
+    const rawTargets = dto.targets ?? [];
+    if (rawTargets.length === 0) {
       throw new BadRequestException(
-        'Select at least one grade and section when publishing to specific classes',
+        'Select at least one grade when publishing to specific classes',
       );
     }
 
-    await this.assertAudienceTargetsForSchool(schoolId, targets);
-    return { scope: QuizAudienceScope.GRADE_SECTION, targets };
-  }
-
-  private async assertAudienceTargetsForSchool(
-    schoolId: string,
-    targets: QuizAudienceTarget[],
-  ): Promise<void> {
-    const options = await this.schoolAcademicsService.getForSchoolId(schoolId);
-    for (const target of targets) {
-      if (!options.grades.includes(target.grade)) {
-        throw new BadRequestException(
-          `Grade "${target.grade}" is not configured for this school`,
-        );
+    if (dto.audienceScope === QuizAudienceScope.GRADE) {
+      const targets: QuizAudienceTarget[] = [];
+      for (const t of rawTargets) {
+        const grade = t.grade.trim();
+        if (!options.grades.includes(grade)) {
+          throw new BadRequestException(
+            `Grade "${grade}" is not configured for this school`,
+          );
+        }
+        targets.push({ grade });
       }
-      if (!options.sections.includes(target.section)) {
-        throw new BadRequestException(
-          `Section "${target.section}" is not configured for this school`,
-        );
-      }
+      return { scope: QuizAudienceScope.GRADE, targets };
     }
+
+    const targets: QuizAudienceTarget[] = [];
+    for (const t of rawTargets) {
+      const grade = t.grade.trim();
+      const section = t.section?.trim() ?? '';
+      if (!options.grades.includes(grade)) {
+        throw new BadRequestException(
+          `Grade "${grade}" is not configured for this school`,
+        );
+      }
+      const sectionsForGrade = options.gradeSections[grade] ?? [];
+      if (!section || !sectionsForGrade.includes(section)) {
+        throw new BadRequestException(
+          `Section "${section}" is not configured for ${grade}`,
+        );
+      }
+      targets.push({ grade, section });
+    }
+
+    return { scope: QuizAudienceScope.GRADE_SECTION, targets };
   }
 
   private hasAnalyticsFilters(filters: DashboardAnalyticsQueryDto): boolean {
     return !!(
       filters.grade?.trim() ||
+      filters.section?.trim() ||
       filters.subject?.trim() ||
       filters.board?.trim() ||
       filters.topic?.trim() ||
@@ -623,10 +894,15 @@ export class QuizService {
   private async loadAnalyticsFilterOptions(
     schoolIds: string[],
     creatorRoles: UserRole[],
+    createdByUserId?: string,
   ) {
     const base = this.quizRepository
       .createQueryBuilder('q')
       .where('q.school_id IN (:...schoolIds)', { schoolIds });
+
+    if (createdByUserId) {
+      base.andWhere('q.created_by_user_id = :createdByUserId', { createdByUserId });
+    }
 
     const [grades, subjects, boards, topics, links] = await Promise.all([
       base

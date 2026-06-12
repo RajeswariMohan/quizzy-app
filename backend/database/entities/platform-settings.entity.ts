@@ -7,6 +7,13 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { User } from './user.entity';
+import {
+  DEFAULT_SUBSCRIPTION_PACKAGES,
+  SubscriptionPackageTemplates,
+} from '../constants/subscription-packages';
+
+export type { SubscriptionPackageFeatures, SubscriptionPackageTemplates } from '../constants/subscription-packages';
+export { DEFAULT_SUBSCRIPTION_PACKAGES };
 
 export interface PlatformSettingsJson {
   aiGenerationEnabled: boolean;
@@ -16,6 +23,7 @@ export interface PlatformSettingsJson {
   gamificationEnabled: boolean;
   maintenanceMode: boolean;
   maintenanceMessage: string | null;
+  subscriptionPackages?: SubscriptionPackageTemplates;
 }
 
 export const DEFAULT_PLATFORM_SETTINGS: PlatformSettingsJson = {
@@ -26,6 +34,7 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettingsJson = {
   gamificationEnabled: true,
   maintenanceMode: false,
   maintenanceMessage: null,
+  subscriptionPackages: DEFAULT_SUBSCRIPTION_PACKAGES,
 };
 
 export const PLATFORM_SETTINGS_ROW_ID = '00000000-0000-0000-0000-000000000001';

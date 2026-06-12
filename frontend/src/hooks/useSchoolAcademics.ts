@@ -1,12 +1,16 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useSchoolAcademicsStore } from '@/store/schoolAcademicsStore';
 import { useAuthStore } from '@/store/authStore';
 import { useSchoolFilterStore } from '@/store/schoolFilterStore';
+import { sortAlphabetically } from '@/utils/academicOptions';
 
 export interface SchoolAcademicsState {
   grades: string[];
+  gradeSections: Record<string, string[]>;
   sections: string[];
   subjects: string[];
+  board: string | null;
+  subscriptionTier: import('@/api/schoolAdmin.api').SchoolSubscriptionTier;
   isLoading: boolean;
   reload: () => void;
 }
@@ -27,10 +31,18 @@ export function useSchoolAcademics(): SchoolAcademicsState {
     void load();
   }, [isAuthenticated, filterVersion, load]);
 
+  const subjects = useMemo(
+    () => sortAlphabetically(config.subjects),
+    [config.subjects],
+  );
+
   return {
     grades: config.grades,
+    gradeSections: config.gradeSections,
     sections: config.sections,
-    subjects: config.subjects,
+    subjects,
+    board: config.board?.trim() || null,
+    subscriptionTier: config.subscriptionTier,
     isLoading,
     reload: () => void load(),
   };

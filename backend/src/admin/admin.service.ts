@@ -13,12 +13,15 @@ import { StudentResponse } from '@database/entities/student-response.entity';
 import { User } from '@database/entities/user.entity';
 import { QuizStatus } from '@database/enums/quiz-status.enum';
 import { UserRole } from '@database/enums/user-role.enum';
+import { SchoolSubscriptionTier } from '@database/enums/school-subscription-tier.enum';
 import { UpdatePlatformSettingsDto } from './dto/update-platform-settings.dto';
 import { CreateSchoolDto } from './dto/create-school.dto';
 import { UpdateSchoolDto } from './dto/update-school.dto';
 import { CreateSchoolAdminDto } from './dto/create-school-admin.dto';
 import { UpdateSchoolAdminDto } from './dto/update-school-admin.dto';
 import { SchoolLimitsService } from '../school/school-limits.service';
+import { SchoolFeatureService } from '../school/school-feature.service';
+import { UpdateSubscriptionPackagesDto } from './dto/update-subscription-packages.dto';
 import { PasswordService } from '../auth/services/password.service';
 import {
   DEFAULT_GRADE_OPTIONS,
@@ -40,6 +43,7 @@ export class AdminService {
     @InjectRepository(StudentResponse)
     private readonly responseRepository: Repository<StudentResponse>,
     private readonly schoolLimitsService: SchoolLimitsService,
+    private readonly schoolFeatureService: SchoolFeatureService,
     private readonly passwordService: PasswordService,
   ) {}
 
@@ -76,6 +80,14 @@ export class AdminService {
   async getPublicFeatures(): Promise<PlatformSettingsJson> {
     const row = await this.ensureSettingsRow();
     return row.settings;
+  }
+
+  getSubscriptionPackages() {
+    return this.schoolFeatureService.getSubscriptionPackagesForAdmin();
+  }
+
+  updateSubscriptionPackages(dto: UpdateSubscriptionPackagesDto, updatedByUserId: string) {
+    return this.schoolFeatureService.updatePackageTemplates(dto, updatedByUserId);
   }
 
   async getPlatformOverview(
@@ -170,6 +182,10 @@ export class AdminService {
       throw new ConflictException('A school with this slug already exists');
     }
 
+    const defaultGradeSections = Object.fromEntries(
+      DEFAULT_GRADE_OPTIONS.map((grade) => [grade, [...DEFAULT_SECTION_OPTIONS]]),
+    );
+
     const school = this.schoolsRepository.create({
       name: dto.name.trim(),
       slug,
@@ -181,7 +197,9 @@ export class AdminService {
       maxParents: dto.maxParents ?? null,
       gradeOptions: [...DEFAULT_GRADE_OPTIONS],
       sectionOptions: [...DEFAULT_SECTION_OPTIONS],
+      gradeSectionMap: defaultGradeSections,
       subjectOptions: [...DEFAULT_SUBJECT_OPTIONS],
+      subscriptionTier: dto.subscriptionTier ?? SchoolSubscriptionTier.STANDARD,
       isActive: true,
     });
 
@@ -290,6 +308,7 @@ export class AdminService {
     if (dto.maxStudents !== undefined) school.maxStudents = dto.maxStudents;
     if (dto.maxTeachers !== undefined) school.maxTeachers = dto.maxTeachers;
     if (dto.maxParents !== undefined) school.maxParents = dto.maxParents;
+    if (dto.subscriptionTier !== undefined) school.subscriptionTier = dto.subscriptionTier;
 
     const saved = await this.schoolsRepository.save(school);
     return this.buildSchoolStats(saved);
@@ -338,6 +357,7 @@ export class AdminService {
       primaryColor: school.primaryColor,
       secondaryColor: school.secondaryColor,
       isActive: school.isActive,
+      subscriptionTier: school.subscriptionTier ?? SchoolSubscriptionTier.STANDARD,
       students,
       teachers,
       parents,
@@ -373,6 +393,12 @@ export class AdminService {
         id: PLATFORM_SETTINGS_ROW_ID,
         settings: { ...DEFAULT_PLATFORM_SETTINGS },
       });
+      await this.settingsRepository.save(row);
+    } else if (!row.settings.subscriptionPackages) {
+      row.settings = {
+        ...row.settings,
+        subscriptionPackages: { ...DEFAULT_PLATFORM_SETTINGS.subscriptionPackages! },
+      };
       await this.settingsRepository.save(row);
     }
 

@@ -11,9 +11,9 @@ export const PUBLIC_SITE = {
   productName: 'Quizzy',
   tagline: 'Learn. Practice. Excel.',
   description:
-    'Quizzy is a school quiz platform that helps students practice with purpose, gives teachers clear classroom insights, and keeps parents informed about progress.',
+    'Quizzy is a school quiz platform that helps students practice with purpose, gives teachers clear insights by grade, and keeps parents informed about progress.',
   heroSubtext:
-    'Assign quizzes, celebrate effort with XP and streaks, and review results by class, grade level, and subject in one secure portal for your school.',
+    'Assign quizzes, celebrate effort with XP and streaks, and review results by grade and subject in one secure portal for your school.',
   supportEmail: trimOrUndefined(import.meta.env.VITE_SUPPORT_EMAIL) ?? 'support@quizzy.app',
   supportUrl: trimOrUndefined(import.meta.env.VITE_SUPPORT_URL),
   termsUrl: trimOrUndefined(import.meta.env.VITE_TERMS_URL),

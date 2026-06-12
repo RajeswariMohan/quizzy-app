@@ -34,6 +34,11 @@ export class UpdateSchoolUserDto {
   @MinLength(1)
   section?: string;
 
+  /** Student profile: parent contact for auto-linking when parent registers */
+  @IsOptional()
+  @IsEmail()
+  parentEmail?: string;
+
   @IsOptional()
   @IsString()
   @MinLength(8)

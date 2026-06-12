@@ -6,9 +6,16 @@ export interface StudentQuizListItem {
   subject: string | null;
   topic: string | null;
   className: string | null;
+  audienceScope: string;
+  audienceLabel: string;
   questionCount: number;
   answeredCount: number;
   isComplete: boolean;
+}
+
+export interface StudentQuizListResponse {
+  filter: { grade: string; section?: string } | null;
+  items: StudentQuizListItem[];
 }
 
 export interface StudentQuizPriorAnswer {
@@ -46,6 +53,13 @@ export interface SubmitResponseResult {
   explanation: string | null;
 }
 
+export interface StudentSubjectPerformance {
+  subject: string;
+  score: number;
+  answeredCount: number;
+  correctCount: number;
+}
+
 export interface StudentProgress {
   displayName: string;
   xpPoints: number;
@@ -56,8 +70,8 @@ export interface StudentProgress {
   quizzesTaken: number;
   accuracy: number;
   totalAnswers: number;
-  topicMastery: { topic: string; percentage: number }[];
   performanceOverTime: { label: string; value: number }[];
+  subjectPerformance: StudentSubjectPerformance[];
 }
 
 export interface LeaderboardEntryApi {
@@ -66,11 +80,57 @@ export interface LeaderboardEntryApi {
   name: string;
   xp: number;
   score: number;
+  grade: string | null;
+  section: string | null;
   isCurrentUser: boolean;
 }
 
-export async function fetchStudentQuizzes(): Promise<StudentQuizListItem[]> {
-  const { data } = await apiClient.get<StudentQuizListItem[]>('/student/quizzes');
+export type LeaderboardScopeKey = 'class' | 'section';
+
+export interface StudentAudienceOptions {
+  viewer: { grade: string | null; section: string | null };
+  grades: string[];
+  sectionsByGrade: Record<string, string[]>;
+  hasSchoolWidePublished: boolean;
+}
+
+export interface StudentAudienceQuery {
+  grade?: string;
+  scope?: LeaderboardScopeKey;
+  section?: string;
+}
+
+export interface StudentLeaderboardFilter {
+  grade: string;
+  scope: LeaderboardScopeKey;
+  section: string | null;
+  headline: string;
+  description: string;
+}
+
+export interface StudentLeaderboardResponse {
+  viewer: { grade: string | null; section: string | null };
+  profileComplete: boolean;
+  options: {
+    grades: string[];
+    sectionsByGrade: Record<string, string[]>;
+    hasSchoolWidePublished: boolean;
+  };
+  filter: StudentLeaderboardFilter | null;
+  entries: LeaderboardEntryApi[];
+}
+
+export async function fetchStudentAudienceOptions(): Promise<StudentAudienceOptions> {
+  const { data } = await apiClient.get<StudentAudienceOptions>('/student/audience-options');
+  return data;
+}
+
+export async function fetchStudentQuizzes(
+  params?: StudentAudienceQuery,
+): Promise<StudentQuizListResponse> {
+  const { data } = await apiClient.get<StudentQuizListResponse>('/student/quizzes', {
+    params,
+  });
   return data;
 }
 
@@ -95,7 +155,11 @@ export async function fetchStudentProgress(): Promise<StudentProgress> {
   return data;
 }
 
-export async function fetchStudentLeaderboard(): Promise<LeaderboardEntryApi[]> {
-  const { data } = await apiClient.get<LeaderboardEntryApi[]>('/student/leaderboard');
+export async function fetchStudentLeaderboard(
+  params?: StudentAudienceQuery,
+): Promise<StudentLeaderboardResponse> {
+  const { data } = await apiClient.get<StudentLeaderboardResponse>('/student/leaderboard', {
+    params,
+  });
   return data;
 }

@@ -2,8 +2,6 @@ import { Link } from 'react-router-dom';
 import { Building2, Lock, Target } from 'lucide-react';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { PUBLIC_SITE } from '@/config/publicSite';
-import { useRedirectIfAuthenticated } from '@/hooks/useRedirectIfAuthenticated';
-
 const VALUES = [
   {
     icon: Target,
@@ -23,8 +21,6 @@ const VALUES = [
 ] as const;
 
 export function AboutPage() {
-  useRedirectIfAuthenticated();
-
   return (
     <PublicLayout>
       <article className="mx-auto max-w-3xl px-5 py-12 sm:px-8 sm:py-16">

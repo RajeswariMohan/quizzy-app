@@ -3,7 +3,10 @@ import type { UserRole } from '@/types/auth';
 
 export interface EngagementOverview {
   days: number;
+  dateFrom: string;
+  dateTo: string;
   since: string;
+  until: string;
   byRole: {
     role: UserRole;
     activeUsers: number;
@@ -41,6 +44,8 @@ export interface MySessionStats {
 
 export interface EngagementQuery {
   days?: number;
+  dateFrom?: string;
+  dateTo?: string;
   role?: UserRole;
   search?: string;
 }

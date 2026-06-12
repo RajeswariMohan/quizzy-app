@@ -18,6 +18,31 @@ export interface SchoolLimits {
 
 export type AdminSchoolsStatusFilter = 'active' | 'inactive' | 'all';
 
+export type SchoolSubscriptionTier = 'BASIC' | 'STANDARD' | 'PREMIUM';
+
+export interface SubscriptionPackageFeatures {
+  publishScopeGrade: boolean;
+  publishScopeSchool: boolean;
+  publishScopeSection: boolean;
+  aiGenerationEnabled: boolean;
+  teacherQuizCreationEnabled: boolean;
+  studentLeaderboardEnabled: boolean;
+  parentPortalEnabled: boolean;
+  gamificationEnabled: boolean;
+  bulkUserImportEnabled: boolean;
+}
+
+export interface SubscriptionPackageFeatureMeta {
+  key: keyof SubscriptionPackageFeatures;
+  label: string;
+  description: string;
+}
+
+export interface SubscriptionPackagesResponse {
+  templates: Record<SchoolSubscriptionTier, SubscriptionPackageFeatures>;
+  features: SubscriptionPackageFeatureMeta[];
+}
+
 export interface SchoolPlatformStats {
   id: string;
   name: string;
@@ -26,6 +51,7 @@ export interface SchoolPlatformStats {
   primaryColor: string;
   secondaryColor: string;
   isActive: boolean;
+  subscriptionTier: SchoolSubscriptionTier;
   students: number;
   teachers: number;
   parents: number;
@@ -83,6 +109,20 @@ export async function updatePlatformSettings(
   return data;
 }
 
+export async function fetchSubscriptionPackages(): Promise<SubscriptionPackagesResponse> {
+  const { data } = await apiClient.get<SubscriptionPackagesResponse>('/admin/subscription-packages');
+  return data;
+}
+
+export async function updateSubscriptionPackages(
+  templates: Record<SchoolSubscriptionTier, SubscriptionPackageFeatures>,
+): Promise<Record<SchoolSubscriptionTier, SubscriptionPackageFeatures>> {
+  const { data } = await apiClient.patch<
+    Record<SchoolSubscriptionTier, SubscriptionPackageFeatures>
+  >('/admin/subscription-packages', templates);
+  return data;
+}
+
 export async function fetchPlatformFeatures(): Promise<PlatformFeatures> {
   const { data } = await apiClient.get<PlatformFeatures>('/platform/features');
   return data;
@@ -101,15 +141,19 @@ export interface CreateSchoolPayload {
   adminPassword: string;
   adminFirstName: string;
   adminLastName: string;
+  subscriptionTier?: SchoolSubscriptionTier;
 }
 
 export interface UpdateSchoolPayload {
   name?: string;
   board?: string | null;
+  primaryColor?: string;
+  secondaryColor?: string;
   isActive?: boolean;
   maxStudents?: number | null;
   maxTeachers?: number | null;
   maxParents?: number | null;
+  subscriptionTier?: SchoolSubscriptionTier;
 }
 
 export async function createSchool(payload: CreateSchoolPayload): Promise<SchoolPlatformStats> {

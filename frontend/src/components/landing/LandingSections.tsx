@@ -3,6 +3,7 @@ import { ArrowRight } from 'lucide-react';
 import { WatchDemoButton } from '@/components/landing/WatchDemoButton';
 import {
   LANDING_AUDIENCES,
+  LANDING_COMMUNITY_SUMMARY,
   LANDING_FEATURES,
   LANDING_STEPS,
 } from '@/content/landingContent';
@@ -84,9 +85,7 @@ export function LandingAudiencesSection() {
               Designed for your whole school community
             </h2>
             <p className="mt-4 text-base leading-relaxed text-muted">
-              Students stay engaged with structured practice. Teachers spend less time guessing
-              which students need support. Parents see progress they can discuss at home.
-              Administrators manage users, classes, and academics from one secure portal.
+              {LANDING_COMMUNITY_SUMMARY}
             </p>
             <Link
               to="/about"
@@ -101,7 +100,7 @@ export function LandingAudiencesSection() {
             {LANDING_AUDIENCES.map(({ icon: Icon, title, description }) => (
               <li
                 key={title}
-                className="rounded-2xl border border-gray-100 bg-white p-5 shadow-card"
+                className="rounded-2xl border border-gray-100 bg-white p-5 shadow-card transition hover:border-primary/15 hover:shadow-md"
               >
                 <Icon className="h-6 w-6 text-secondary" aria-hidden />
                 <h3 className="mt-3 font-semibold text-ink">{title}</h3>

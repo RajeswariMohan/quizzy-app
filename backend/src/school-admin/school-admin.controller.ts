@@ -19,7 +19,6 @@ import { UpdateSchoolAcademicsDto } from './dto/update-school-academics.dto';
 import { UpdateSchoolUserDto } from './dto/update-school-user.dto';
 import {
   ListSchoolUsersQueryDto,
-  SchoolUserStatusFilter,
 } from './dto/list-school-users-query.dto';
 import { SetUserStatusDto } from './dto/set-user-status.dto';
 import { SchoolAdminService } from './school-admin.service';
@@ -56,11 +55,7 @@ export class SchoolAdminController {
     @CurrentTenant() tenant: TenantContext,
     @Query() query: ListSchoolUsersQueryDto,
   ) {
-    return this.schoolAdminService.listUsers(
-      tenant,
-      query.role,
-      query.status ?? SchoolUserStatusFilter.ACTIVE,
-    );
+    return this.schoolAdminService.listUsers(tenant, query);
   }
 
   @Post('users/bulk')

@@ -3,6 +3,7 @@ import type { UserRole } from '@/types/auth';
 export interface AcademicOptions {
   grades: string[];
   sections: string[];
+  gradeSections?: Record<string, string[]>;
 }
 
 export interface UserProfile {

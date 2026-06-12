@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Sparkles, Upload, UserCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Sparkles, Upload } from 'lucide-react';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { createQuiz, getQuiz, publishQuiz } from '@/api/quiz.api';
@@ -10,12 +10,17 @@ import { BulkQuestionUpload } from '@/components/quiz/BulkQuestionUpload';
 import { ManualMcqForm } from '@/components/quiz/ManualMcqForm';
 import { useNotificationStore } from '@/store/notificationStore';
 import { QuizQuestionsPanel } from '@/components/quiz/QuizQuestionsPanel';
-import { FieldSelect } from '@/components/ui/FieldSelect';
-import { BOARDS } from '@/constants/academics';
+import { QuizAcademicFields } from '@/components/quiz/QuizAcademicFields';
 import { useSchoolAcademics } from '@/hooks/useSchoolAcademics';
-import { useAuthStore } from '@/store/authStore';
-import { formatUserRole } from '@/utils/userRole';
+import { useSchoolFeatures } from '@/hooks/useSchoolFeatures';
 import { formatAudienceLabel } from '@/utils/quizAudience';
+import { formatUserRole } from '@/utils/userRole';
+import type { QuizAcademicLink } from '@/utils/quizFilters';
+import {
+  hasQuizTopic,
+  normalizeQuizTopicForApi,
+  QUIZ_TOPIC_PUBLISH_MESSAGE,
+} from '@/utils/quizTopic';
 import type { CreateQuizPayload, PublishQuizPayload, QuizCreator, QuizStatus } from '@/types/quiz';
 
 interface QuizCreatorFormProps {
@@ -23,6 +28,8 @@ interface QuizCreatorFormProps {
   defaultClassId?: string;
   /** Load an existing draft quiz to add more questions */
   existingQuizId?: string | null;
+  /** Grade/subject/topic from the teacher quiz list for linked academic fields */
+  academicLinks?: QuizAcademicLink[];
   onPublished?: () => void;
   onQuestionAdded?: (quizId: string) => void;
   /** When set, Cancel on manual MCQ closes this flow (e.g. hide “Add questions” panel) */
@@ -32,36 +39,28 @@ interface QuizCreatorFormProps {
 
 export function QuizCreatorForm({
   existingQuizId = null,
+  academicLinks = [],
   onPublished,
   onQuestionAdded,
   onCancel,
   compact = false,
 }: QuizCreatorFormProps) {
   const addNotification = useNotificationStore((s) => s.addNotification);
-  const currentUser = useAuthStore((s) => s.user);
-  const { grades: schoolGrades, subjects: schoolSubjects } = useSchoolAcademics();
+  const { grades: schoolGrades, subjects: schoolSubjects, board: schoolBoard } =
+    useSchoolAcademics();
+  const { features } = useSchoolFeatures();
   const [savedCreator, setSavedCreator] = useState<QuizCreator | null>(null);
   const [quizId, setQuizId] = useState<string | null>(null);
   const [quizClassSection, setQuizClassSection] = useState<string | null>(null);
   const [showPublishDialog, setShowPublishDialog] = useState(false);
   const [title, setTitle] = useState('');
-  const [board, setBoard] = useState<string>(BOARDS[0]);
   const [grade, setGrade] = useState<string>(schoolGrades[0] ?? '');
   const [subject, setSubject] = useState<string>(schoolSubjects[0] ?? '');
-  const gradeOptions = useMemo(() => {
-    const list = [...schoolGrades];
-    if (grade && !list.includes(grade)) list.unshift(grade);
-    return list;
-  }, [schoolGrades, grade]);
-  const subjectOptions = useMemo(() => {
-    const list = [...schoolSubjects];
-    if (subject && !list.includes(subject)) list.unshift(subject);
-    return list;
-  }, [schoolSubjects, subject]);
   const [topic, setTopic] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [quizStatus, setQuizStatus] = useState<QuizStatus>('DRAFT');
   const [questionsRefreshKey, setQuestionsRefreshKey] = useState(0);
+  const metaLocked = Boolean(existingQuizId);
 
   const refreshSavedQuestions = (id: string) => {
     setQuestionsRefreshKey((k) => k + 1);
@@ -86,7 +85,6 @@ export function QuizCreatorForm({
     getQuiz(existingQuizId)
       .then((q) => {
         setTitle(q.title);
-        setBoard(q.board ?? BOARDS[0]);
         setGrade(q.grade ?? schoolGrades[0] ?? '');
         setSubject(q.subject ?? schoolSubjects[0] ?? '');
         setTopic(q.topic ?? '');
@@ -102,10 +100,10 @@ export function QuizCreatorForm({
     if (quizId) return quizId;
     const payload: CreateQuizPayload = {
       title: title || 'Untitled Quiz',
-      board,
+      ...(schoolBoard ? { board: schoolBoard } : {}),
       grade,
       subject,
-      topic: topic || undefined,
+      topic: normalizeQuizTopicForApi(topic),
     };
     const quiz = await createQuiz(payload);
     setQuizId(quiz.id);
@@ -135,6 +133,14 @@ export function QuizCreatorForm({
   };
 
   const handlePublishConfirm = async (payload: PublishQuizPayload) => {
+    if (!hasQuizTopic(topic)) {
+      addNotification({
+        title: 'Topic required',
+        body: QUIZ_TOPIC_PUBLISH_MESSAGE,
+        type: 'error',
+      });
+      return;
+    }
     setIsSaving(true);
     try {
       const id = await ensureQuiz();
@@ -164,30 +170,35 @@ export function QuizCreatorForm({
 
   const showQuizMeta = !compact || !existingQuizId;
 
-  const creatorDisplay = savedCreator
-    ? `${savedCreator.displayName} (${formatUserRole(savedCreator.role)})`
-    : currentUser
-      ? `${currentUser.displayName} (${formatUserRole(currentUser.role)})`
-      : null;
+  const showSavedCreator =
+    Boolean(existingQuizId) &&
+    savedCreator &&
+    savedCreator.role !== 'SUPER_ADMIN';
+  const creatorDisplay = showSavedCreator
+    ? `${savedCreator!.displayName} (${formatUserRole(savedCreator!.role)})`
+    : null;
 
   return (
     <div className={compact ? 'space-y-4' : 'flex flex-col gap-6'}>
+      {!features.teacherQuizCreationEnabled ? (
+        <Card className="border-warning/30 bg-warning/5">
+          <CardTitle className="text-base">Quiz creation unavailable</CardTitle>
+          <p className="mt-1 text-sm text-muted">
+            Your school package does not include quiz creation. Contact your platform administrator.
+          </p>
+        </Card>
+      ) : (
+        <>
       {showQuizMeta && (
         <Card className={compact ? '!p-4' : undefined}>
           <CardTitle>{existingQuizId ? 'Quiz details' : 'New quiz'}</CardTitle>
-          {creatorDisplay && (
-            <div className="mt-3 flex items-start gap-2 rounded-xl border border-primary/15 bg-white/80 px-3 py-2.5 text-sm">
-              <UserCircle className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-              <div>
-                <p className="font-medium text-ink">Created by</p>
-                <p className="text-muted">{creatorDisplay}</p>
-                {savedCreator?.email && (
-                  <p className="text-xs text-muted">{savedCreator.email}</p>
-                )}
-                {!savedCreator && currentUser?.email && (
-                  <p className="text-xs text-muted">{currentUser.email}</p>
-                )}
-              </div>
+          {creatorDisplay && savedCreator && (
+            <div className="mt-3 rounded-xl border border-primary/15 bg-white/80 px-3 py-2.5 text-sm">
+              <p className="font-medium text-ink">Created by</p>
+              <p className="text-muted">{creatorDisplay}</p>
+              {savedCreator.email && (
+                <p className="text-xs text-muted">{savedCreator.email}</p>
+              )}
             </div>
           )}
           <div className="mt-4 space-y-3">
@@ -196,44 +207,21 @@ export function QuizCreatorForm({
               placeholder="Quiz title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              readOnly={Boolean(existingQuizId)}
+              readOnly={metaLocked}
             />
-            <div className="grid grid-cols-2 gap-3">
-              <FieldSelect
-                label="Board"
-                value={board}
-                options={BOARDS}
-                onChange={setBoard}
-                disabled={Boolean(existingQuizId)}
-              />
-              <FieldSelect
-                label="Grade"
-                value={grade}
-                options={gradeOptions}
-                onChange={setGrade}
-                disabled={Boolean(existingQuizId)}
-                required
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <FieldSelect
-                label="Subject"
-                value={subject}
-                options={subjectOptions}
-                onChange={setSubject}
-                disabled={Boolean(existingQuizId)}
-              />
-              <div>
-                <label className="mb-1 block text-sm font-medium text-ink">Topic</label>
-                <input
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
-                  placeholder="e.g. Photosynthesis"
-                  value={topic}
-                  onChange={(e) => setTopic(e.target.value)}
-                  readOnly={Boolean(existingQuizId)}
-                />
-              </div>
-            </div>
+            <QuizAcademicFields
+              academicLinks={academicLinks}
+              schoolGrades={schoolGrades}
+              schoolSubjects={schoolSubjects}
+              grade={grade}
+              subject={subject}
+              topic={topic}
+              onGradeChange={setGrade}
+              onSubjectChange={setSubject}
+              onTopicChange={setTopic}
+              disabled={metaLocked}
+              gradeRequired
+            />
             <p className="text-xs text-muted">
               Quiz details are auto-used when you add the first question.
             </p>
@@ -268,7 +256,17 @@ export function QuizCreatorForm({
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setShowPublishDialog(true)}
+                    onClick={() => {
+                      if (!hasQuizTopic(topic)) {
+                        addNotification({
+                          title: 'Topic required',
+                          body: QUIZ_TOPIC_PUBLISH_MESSAGE,
+                          type: 'error',
+                        });
+                        return;
+                      }
+                      setShowPublishDialog(true);
+                    }}
                     disabled={isSaving || !quizId}
                   >
                     Publish quiz
@@ -312,14 +310,24 @@ export function QuizCreatorForm({
       )}
 
       <Card
-        className={`border-gray-200 bg-gray-50/90 opacity-75 ${compact ? '!p-4' : ''}`}
-        aria-disabled="true"
+        className={
+          features.aiGenerationEnabled
+            ? compact
+              ? '!p-4'
+              : undefined
+            : `border-gray-200 bg-gray-50/90 opacity-75 ${compact ? '!p-4' : ''}`
+        }
+        aria-disabled={!features.aiGenerationEnabled}
       >
-        <CardTitle className="flex items-center gap-2 text-muted">
+        <CardTitle
+          className={`flex items-center gap-2 ${features.aiGenerationEnabled ? '' : 'text-muted'}`}
+        >
           <Sparkles className="h-4 w-4" /> AI prompt ingestion
         </CardTitle>
         <p className="mt-1 text-sm text-muted">
-          Temporarily unavailable — use manual MCQs or bulk upload above.
+          {features.aiGenerationEnabled
+            ? 'Coming soon — use manual MCQs or bulk upload above for now.'
+            : 'Not included in your school package — use manual MCQs or bulk upload above.'}
         </p>
         <fieldset disabled className="mt-3 min-w-0 border-0 p-0">
           <textarea
@@ -355,6 +363,8 @@ export function QuizCreatorForm({
           onClose={() => setShowPublishDialog(false)}
           onConfirm={handlePublishConfirm}
         />
+      )}
+        </>
       )}
     </div>
   );

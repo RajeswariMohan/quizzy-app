@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { UserSession } from '@database/entities/user-session.entity';
@@ -28,11 +28,10 @@ export class EngagementService {
   async getOverview(tenant: TenantContext, query: EngagementQueryDto) {
     const schoolIds = this.resolveSchoolIds(tenant);
     const visibleRoles = this.resolveVisibleRoles(tenant);
-    const days = query.days ?? 30;
-    const since = new Date();
-    since.setDate(since.getDate() - days);
+    const { since, until, days, dateFrom, dateTo } = this.resolveEngagementWindow(query);
     const requestedRole =
       query.role && visibleRoles.includes(query.role) ? query.role : undefined;
+    const teacherSessionTableOnly = tenant.role === UserRole.TEACHER;
 
     const qb = this.sessionsRepository
       .createQueryBuilder('s')
@@ -43,11 +42,21 @@ export class EngagementService {
       .addSelect('COALESCE(SUM(s.active_seconds), 0)', 'totalActiveSeconds')
       .addSelect('COALESCE(AVG(s.active_seconds), 0)', 'avgSessionSeconds')
       .where('s.started_at >= :since', { since })
+      .andWhere('s.started_at <= :until', { until })
       .andWhere('u.role IN (:...roles)', { roles: visibleRoles });
 
     if (schoolIds !== null) {
       if (schoolIds.length === 0) {
-        return { days, since: since.toISOString(), byRole: [], users: [] };
+        return {
+          days,
+          dateFrom,
+          dateTo,
+          since: since.toISOString(),
+          until: until.toISOString(),
+          byRole: [],
+          dailyTrend: [],
+          users: [],
+        };
       }
       qb.andWhere('s.school_id IN (:...schoolIds)', { schoolIds });
     }
@@ -56,7 +65,7 @@ export class EngagementService {
       qb.andWhere('u.role = :role', { role: requestedRole });
     }
 
-    if (tenant.role === UserRole.TEACHER) {
+    if (teacherSessionTableOnly) {
       qb.andWhere(
         '(u.role <> :teacherRole OR u.id = :teacherUserId)',
         {
@@ -78,22 +87,28 @@ export class EngagementService {
       tenant,
       schoolIds,
       since,
+      until,
       requestedRole,
       visibleRoles,
       query.search,
+      teacherSessionTableOnly,
     );
 
     const dailyTrend = await this.loadDailyTrend(
       tenant,
       schoolIds,
       since,
+      until,
       requestedRole,
       visibleRoles,
     );
 
     return {
       days,
+      dateFrom,
+      dateTo,
       since: since.toISOString(),
+      until: until.toISOString(),
       byRole: byRole.map((row) => ({
         role: row.role,
         activeUsers: Number(row.activeUsers),
@@ -133,21 +148,70 @@ export class EngagementService {
     };
   }
 
+  private resolveEngagementWindow(query: EngagementQueryDto): {
+    since: Date;
+    until: Date;
+    days: number;
+    dateFrom: string;
+    dateTo: string;
+  } {
+    const until = query.dateTo?.trim()
+      ? new Date(`${query.dateTo.trim()}T23:59:59.999`)
+      : new Date();
+
+    let since: Date;
+    if (query.dateFrom?.trim()) {
+      since = new Date(`${query.dateFrom.trim()}T00:00:00.000`);
+    } else {
+      const days = query.days ?? 30;
+      since = new Date(until);
+      since.setDate(since.getDate() - days);
+      since.setHours(0, 0, 0, 0);
+    }
+
+    if (since.getTime() > until.getTime()) {
+      throw new BadRequestException('dateFrom must be on or before dateTo');
+    }
+
+    const spanMs = until.getTime() - since.getTime();
+    const maxSpanMs = 90 * 24 * 60 * 60 * 1000;
+    if (spanMs > maxSpanMs) {
+      throw new BadRequestException('Date range cannot exceed 90 days');
+    }
+
+    const days = Math.max(
+      1,
+      Math.ceil(spanMs / (24 * 60 * 60 * 1000)),
+    );
+
+    const toIso = (d: Date) => d.toISOString().slice(0, 10);
+
+    return {
+      since,
+      until,
+      days,
+      dateFrom: query.dateFrom?.trim() || toIso(since),
+      dateTo: query.dateTo?.trim() || toIso(until),
+    };
+  }
+
   private async loadUserEngagementRows(
     tenant: TenantContext,
     schoolIds: string[] | null,
     since: Date,
+    until: Date,
     requestedRole: UserRole | undefined,
     visibleRoles: UserRole[],
     search: string | undefined,
+    teacherSessionTableOnly: boolean,
   ) {
     const qb = this.usersRepository
       .createQueryBuilder('u')
       .leftJoin(
         UserSession,
         's',
-        's.user_id = u.id AND s.started_at >= :since',
-        { since },
+        's.user_id = u.id AND s.started_at >= :since AND s.started_at <= :until',
+        { since, until },
       )
       .select('u.id', 'userId')
       .addSelect('u.email', 'email')
@@ -172,14 +236,8 @@ export class EngagementService {
       qb.andWhere('u.role = :role', { role: requestedRole });
     }
 
-    if (tenant.role === UserRole.TEACHER) {
-      qb.andWhere(
-        '(u.role <> :teacherRole OR u.id = :teacherUserId)',
-        {
-          teacherRole: UserRole.TEACHER,
-          teacherUserId: tenant.userId,
-        },
-      );
+    if (teacherSessionTableOnly) {
+      qb.andWhere('u.id = :teacherUserId', { teacherUserId: tenant.userId });
     }
 
     if (search?.trim()) {
@@ -235,6 +293,7 @@ export class EngagementService {
     tenant: TenantContext,
     schoolIds: string[] | null,
     since: Date,
+    until: Date,
     requestedRole: UserRole | undefined,
     visibleRoles: UserRole[],
   ) {
@@ -245,6 +304,7 @@ export class EngagementService {
       .addSelect('COALESCE(SUM(s.active_seconds), 0)', 'activeSeconds')
       .addSelect('COUNT(DISTINCT s.user_id)', 'activeUsers')
       .where('s.started_at >= :since', { since })
+      .andWhere('s.started_at <= :until', { until })
       .andWhere('u.role IN (:...roles)', { roles: visibleRoles });
 
     if (schoolIds !== null && schoolIds.length > 0) {

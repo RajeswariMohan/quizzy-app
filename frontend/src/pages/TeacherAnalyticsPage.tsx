@@ -4,7 +4,7 @@ import { Card, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ClassBarChart } from '@/components/charts/ClassBarChart';
 import { formatUserRole } from '@/utils/userRole';
-import { TopicDonutChart } from '@/components/charts/TopicDonutChart';
+import { MasteryBreakdownCard } from '@/components/analytics/MasteryBreakdownCard';
 import { PerformanceLineChart } from '@/components/charts/PerformanceLineChart';
 import { fetchTeacherDashboard, type AnalyticsQueryFilters, type TeacherDashboardData } from '@/api/dashboard.api';
 import { getApiErrorMessage, logApiError } from '@/api/client';
@@ -32,7 +32,9 @@ export function TeacherAnalyticsPage() {
   const [error, setError] = useState<string | null>(null);
   const filterVersion = useSchoolFilterStore((s) => s.filterVersion);
   const filterLabel = useSchoolFilterStore((s) => s.getFilterLabel());
-  const isSuperAdmin = useAuthStore((s) => s.user?.role === 'SUPER_ADMIN');
+  const userRole = useAuthStore((s) => s.user?.role);
+  const isSuperAdmin = userRole === 'SUPER_ADMIN';
+  const isTeacher = userRole === 'TEACHER';
 
   const load = useCallback(() => {
     setIsLoading(true);
@@ -58,17 +60,17 @@ export function TeacherAnalyticsPage() {
   const stats = data
     ? [
         {
-          label: 'Total students',
+          label: isTeacher ? 'Students in reach' : 'Total students',
           value: String(data.stats.totalStudents),
           icon: Users,
         },
         {
-          label: 'Published quizzes',
+          label: isTeacher ? 'My published quizzes' : 'Published quizzes',
           value: String(data.stats.quizzesConducted),
           icon: BarChart3,
         },
         {
-          label: 'School avg accuracy',
+          label: isTeacher ? 'Avg accuracy' : 'School avg accuracy',
           value: `${data.stats.avgAccuracy}%`,
           icon: TrendingUp,
         },
@@ -87,7 +89,9 @@ export function TeacherAnalyticsPage() {
             <p className="text-muted">
               {isSuperAdmin
                 ? `Aggregated analytics · ${filterLabel}`
-                : 'Class performance, topic mastery, and student rankings from live responses'}
+                : isTeacher
+                  ? 'Metrics for your published quizzes and students matching those audiences'
+                  : 'Class performance, topic mastery, and student rankings from live responses'}
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>
@@ -151,28 +155,14 @@ export function TeacherAnalyticsPage() {
               )}
             </Card>
 
-            <Card>
-              <CardTitle>Topic-wise mastery</CardTitle>
-              <p className="mt-1 text-xs text-muted">Aggregated from all student responses</p>
-              {data.topicPerformance.length > 0 ? (
-                <>
-                  <TopicDonutChart data={data.topicPerformance} />
-                  <ul className="mt-3 space-y-1 text-sm">
-                    {data.topicPerformance.map((t) => (
-                      <li key={t.topic} className="flex justify-between">
-                        <span className="text-muted">{t.topic}</span>
-                        <span className="font-medium">{t.percentage}%</span>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              ) : (
-                <p className="mt-6 text-sm text-muted">No topic data yet.</p>
-              )}
-            </Card>
+            <MasteryBreakdownCard
+              subjectPerformance={data.subjectPerformance ?? []}
+              topicPerformance={data.topicPerformance ?? []}
+              appliedFilters={data.appliedFilters}
+            />
           </div>
 
-          {creatorPerformance.length > 0 && (
+          {!isTeacher && creatorPerformance.length > 0 && (
             <Card className="overflow-hidden !p-0">
               <div className="border-b border-gray-100 px-4 py-3">
                 <CardTitle className="flex items-center gap-2">

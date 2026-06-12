@@ -3,8 +3,13 @@ import { X } from 'lucide-react';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useSchoolAcademics } from '@/hooks/useSchoolAcademics';
+import { useSchoolFeatures } from '@/hooks/useSchoolFeatures';
 import type { PublishQuizPayload, QuizAudienceScope, QuizSummary } from '@/types/quiz';
-import { buildDefaultPublishTargets, targetKey } from '@/utils/quizAudience';
+import {
+  buildDefaultPublishTargets,
+  PUBLISH_SCOPE_LABELS,
+  targetKey,
+} from '@/utils/quizAudience';
 
 interface PublishQuizDialogProps {
   quiz: Pick<QuizSummary, 'id' | 'title' | 'grade' | 'classSection'>;
@@ -13,32 +18,54 @@ interface PublishQuizDialogProps {
 }
 
 export function PublishQuizDialog({ quiz, onClose, onConfirm }: PublishQuizDialogProps) {
-  const { grades, sections, isLoading } = useSchoolAcademics();
+  const { gradeSections, isLoading } = useSchoolAcademics();
+  const { features } = useSchoolFeatures();
+  const scopes = features.allowedPublishScopes;
+
   const defaultTargets = useMemo(
-    () => buildDefaultPublishTargets(quiz, grades, sections),
-    [quiz, grades, sections],
+    () => buildDefaultPublishTargets(quiz, gradeSections),
+    [quiz, gradeSections],
   );
 
-  const [scope, setScope] = useState<QuizAudienceScope>(
-    defaultTargets.length > 0 ? 'GRADE_SECTION' : 'SCHOOL',
+  const defaultScope: QuizAudienceScope =
+    defaultTargets.length > 0 && scopes.includes('GRADE_SECTION')
+      ? 'GRADE_SECTION'
+      : scopes.includes('GRADE')
+        ? 'GRADE'
+        : 'SCHOOL';
+
+  const [scope, setScope] = useState<QuizAudienceScope>(defaultScope);
+  const [selectedGrades, setSelectedGrades] = useState<Set<string>>(() =>
+    new Set(defaultTargets.map((t) => t.grade)),
   );
-  const [selected, setSelected] = useState<Set<string>>(() =>
+  const [selectedSections, setSelectedSections] = useState<Set<string>>(() =>
     new Set(defaultTargets.map((t) => targetKey(t.grade, t.section))),
   );
   const [error, setError] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
 
-  const combinations = useMemo(
+  const grades = useMemo(() => Object.keys(gradeSections), [gradeSections]);
+
+  const sectionCombinations = useMemo(
     () =>
       grades.flatMap((grade) =>
-        sections.map((section) => ({ grade, section })),
+        (gradeSections[grade] ?? []).map((section) => ({ grade, section })),
       ),
-    [grades, sections],
+    [grades, gradeSections],
   );
 
-  const toggleTarget = (grade: string, section: string) => {
+  const toggleGrade = (grade: string) => {
+    setSelectedGrades((prev) => {
+      const next = new Set(prev);
+      if (next.has(grade)) next.delete(grade);
+      else next.add(grade);
+      return next;
+    });
+  };
+
+  const toggleSectionTarget = (grade: string, section: string) => {
     const key = targetKey(grade, section);
-    setSelected((prev) => {
+    setSelectedSections((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
@@ -50,21 +77,32 @@ export function PublishQuizDialog({ quiz, onClose, onConfirm }: PublishQuizDialo
     e.preventDefault();
     setError(null);
 
-    if (scope === 'GRADE_SECTION' && selected.size === 0) {
-      setError('Select at least one grade and section.');
-      return;
-    }
+    let payload: PublishQuizPayload;
 
-    const payload: PublishQuizPayload =
-      scope === 'SCHOOL'
-        ? { audienceScope: 'SCHOOL' }
-        : {
-            audienceScope: 'GRADE_SECTION',
-            targets: Array.from(selected).map((key) => {
-              const [grade, section] = key.split('::');
-              return { grade, section };
-            }),
-          };
+    if (scope === 'SCHOOL') {
+      payload = { audienceScope: 'SCHOOL' };
+    } else if (scope === 'GRADE') {
+      if (selectedGrades.size === 0) {
+        setError('Select at least one grade.');
+        return;
+      }
+      payload = {
+        audienceScope: 'GRADE',
+        targets: Array.from(selectedGrades).map((grade) => ({ grade })),
+      };
+    } else {
+      if (selectedSections.size === 0) {
+        setError('Select at least one grade and section.');
+        return;
+      }
+      payload = {
+        audienceScope: 'GRADE_SECTION',
+        targets: Array.from(selectedSections).map((key) => {
+          const [grade, section] = key.split('::');
+          return { grade, section };
+        }),
+      };
+    }
 
     setIsPublishing(true);
     try {
@@ -76,6 +114,13 @@ export function PublishQuizDialog({ quiz, onClose, onConfirm }: PublishQuizDialo
       setIsPublishing(false);
     }
   };
+
+  const packageHint =
+    features.publishScopeSection
+      ? 'section-level publishing enabled'
+      : features.publishScopeSchool
+        ? 'school-wide or grade-level publishing'
+        : 'grade-level publishing only';
 
   return (
     <div
@@ -97,67 +142,87 @@ export function PublishQuizDialog({ quiz, onClose, onConfirm }: PublishQuizDialo
           Publish quiz
         </CardTitle>
         <p className="mt-1 text-sm text-muted">{quiz.title}</p>
+        <p className="mt-1 text-xs text-muted">
+          Package: {features.subscriptionTier.toLowerCase()} — {packageHint}
+        </p>
 
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium text-ink">Who can take this quiz?</legend>
-            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-gray-100 px-3 py-2.5">
-              <input
-                type="radio"
-                name="audienceScope"
-                value="SCHOOL"
-                checked={scope === 'SCHOOL'}
-                onChange={() => setScope('SCHOOL')}
-                className="mt-1"
-              />
-              <span>
-                <span className="block text-sm font-medium text-ink">All students</span>
-                <span className="text-xs text-muted">Every student in your school</span>
-              </span>
-            </label>
-            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-gray-100 px-3 py-2.5">
-              <input
-                type="radio"
-                name="audienceScope"
-                value="GRADE_SECTION"
-                checked={scope === 'GRADE_SECTION'}
-                onChange={() => setScope('GRADE_SECTION')}
-                className="mt-1"
-              />
-              <span>
-                <span className="block text-sm font-medium text-ink">
-                  Selected grades &amp; sections
+            {scopes.map((value) => (
+              <label
+                key={value}
+                className="flex cursor-pointer items-start gap-2 rounded-lg border border-gray-100 px-3 py-2.5"
+              >
+                <input
+                  type="radio"
+                  name="audienceScope"
+                  value={value}
+                  checked={scope === value}
+                  onChange={() => setScope(value)}
+                  className="mt-1"
+                />
+                <span>
+                  <span className="block text-sm font-medium text-ink">
+                    {PUBLISH_SCOPE_LABELS[value].title}
+                  </span>
+                  <span className="text-xs text-muted">{PUBLISH_SCOPE_LABELS[value].description}</span>
                 </span>
-                <span className="text-xs text-muted">
-                  Only students matching the grade and section you choose
-                </span>
-              </span>
-            </label>
+              </label>
+            ))}
           </fieldset>
+
+          {scope === 'GRADE' && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-ink">Grades</p>
+              {isLoading ? (
+                <p className="text-sm text-muted">Loading school academics…</p>
+              ) : grades.length === 0 ? (
+                <p className="text-sm text-muted">
+                  Configure grades and sections under School Admin → Academics first.
+                </p>
+              ) : (
+                <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-gray-100 p-2">
+                  {grades.map((grade) => (
+                    <li key={grade}>
+                      <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-gray-50">
+                        <input
+                          type="checkbox"
+                          checked={selectedGrades.has(grade)}
+                          onChange={() => toggleGrade(grade)}
+                        />
+                        <span className="text-sm text-ink">{grade}</span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           {scope === 'GRADE_SECTION' && (
             <div className="space-y-2">
               <p className="text-sm font-medium text-ink">Grades &amp; sections</p>
               {isLoading ? (
                 <p className="text-sm text-muted">Loading school academics…</p>
-              ) : combinations.length === 0 ? (
+              ) : sectionCombinations.length === 0 ? (
                 <p className="text-sm text-muted">
                   Configure grades and sections under School Admin → Academics first.
                 </p>
               ) : (
                 <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-gray-100 p-2">
-                  {combinations.map(({ grade, section }) => {
+                  {sectionCombinations.map(({ grade, section }) => {
                     const key = targetKey(grade, section);
                     return (
                       <li key={key}>
                         <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-gray-50">
                           <input
                             type="checkbox"
-                            checked={selected.has(key)}
-                            onChange={() => toggleTarget(grade, section)}
+                            checked={selectedSections.has(key)}
+                            onChange={() => toggleSectionTarget(grade, section)}
                           />
                           <span className="text-sm text-ink">
-                            {grade} · Section {section}
+                            {grade} · {section}
                           </span>
                         </label>
                       </li>
@@ -178,7 +243,9 @@ export function PublishQuizDialog({ quiz, onClose, onConfirm }: PublishQuizDialo
               type="submit"
               disabled={
                 isPublishing ||
-                (scope === 'GRADE_SECTION' && (combinations.length === 0 || selected.size === 0))
+                (scope === 'GRADE' && selectedGrades.size === 0) ||
+                (scope === 'GRADE_SECTION' &&
+                  (sectionCombinations.length === 0 || selectedSections.size === 0))
               }
             >
               {isPublishing ? 'Publishing…' : 'Publish'}

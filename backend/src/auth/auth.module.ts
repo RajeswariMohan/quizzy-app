@@ -77,10 +77,12 @@ export class AuthModule implements NestModule {
         { path: 'auth/login', method: RequestMethod.POST },
         { path: 'auth/register', method: RequestMethod.POST },
         { path: 'auth/register-academics', method: RequestMethod.GET },
+        { path: 'auth/register-schools', method: RequestMethod.GET },
         { path: 'auth/dev/token', method: RequestMethod.POST },
         { path: 'api/auth/login', method: RequestMethod.POST },
         { path: 'api/auth/register', method: RequestMethod.POST },
         { path: 'api/auth/register-academics', method: RequestMethod.GET },
+        { path: 'api/auth/register-schools', method: RequestMethod.GET },
         { path: 'api/auth/dev/token', method: RequestMethod.POST },
       )
       .forRoutes({ path: '{*path}', method: RequestMethod.ALL });

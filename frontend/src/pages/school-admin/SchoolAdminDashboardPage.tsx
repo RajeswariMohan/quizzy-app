@@ -5,6 +5,9 @@ import { Card, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { fetchSchoolAdminOverview } from '@/api/schoolAdmin.api';
 import { getApiErrorMessage, logApiError } from '@/api/client';
+import { useSchoolFeatures } from '@/hooks/useSchoolFeatures';
+import { formatTierLabel } from '@/utils/packageFeatures';
+import { Badge } from '@/components/ui/Badge';
 
 function usageLabel(used: number, max: number | null): string {
   if (max == null) return `${used} (no limit)`;
@@ -12,6 +15,7 @@ function usageLabel(used: number, max: number | null): string {
 }
 
 export function SchoolAdminDashboardPage() {
+  const { features } = useSchoolFeatures();
   const [data, setData] = useState<Awaited<ReturnType<typeof fetchSchoolAdminOverview>> | null>(
     null,
   );
@@ -58,6 +62,9 @@ export function SchoolAdminDashboardPage() {
         <div>
           <h1 className="text-2xl font-bold text-ink">{school.name}</h1>
           <p className="text-muted">School administration · onboard users and monitor usage</p>
+          <Badge className="mt-2 bg-primary/10 text-primary">
+            Package: {formatTierLabel(features.subscriptionTier)}
+          </Badge>
         </div>
         <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>
           <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />

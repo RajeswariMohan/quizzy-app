@@ -1,5 +1,6 @@
 import {
   IsBoolean,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -8,6 +9,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+import { SchoolSubscriptionTier } from '@database/enums/school-subscription-tier.enum';
 
 export class UpdateSchoolDto {
   @IsOptional()
@@ -47,4 +49,8 @@ export class UpdateSchoolDto {
   @IsInt()
   @Min(1)
   maxParents?: number | null;
+
+  @IsOptional()
+  @IsEnum(SchoolSubscriptionTier)
+  subscriptionTier?: SchoolSubscriptionTier;
 }

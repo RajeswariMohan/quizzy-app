@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PUBLIC_SITE, supportMailtoHref } from '@/config/publicSite';
 import {
   LANDING_AUDIENCES,
+  LANDING_COMMUNITY_SUMMARY,
   LANDING_FEATURES,
   LANDING_HERO_HIGHLIGHTS,
   LANDING_STEPS,
@@ -12,6 +13,7 @@ function allLandingStrings(): string[] {
     PUBLIC_SITE.description,
     PUBLIC_SITE.heroSubtext,
     PUBLIC_SITE.tagline,
+    LANDING_COMMUNITY_SUMMARY,
     ...LANDING_FEATURES.flatMap((f) => [f.title, f.description]),
     ...LANDING_STEPS.flatMap((s) => [s.title, s.body]),
     ...LANDING_AUDIENCES.flatMap((a) => [a.title, a.description]),
@@ -45,7 +47,18 @@ describe('landing marketing copy', () => {
 
   it('uses parallel list phrasing for analytics dimensions', () => {
     const analytics = LANDING_FEATURES.find((f) => f.title.includes('Analytics'));
-    expect(analytics?.description).toMatch(/by class, grade level, and quiz creator/);
+    expect(analytics?.description).toMatch(/by grade, subject, and quiz creator/);
+  });
+
+  it('avoids "class" wording in favor of grade on the landing page', () => {
+    const combined = allLandingStrings().join(' ').toLowerCase();
+    expect(combined).not.toMatch(/\bclass\b/);
+    expect(combined).not.toMatch(/\bclasses\b/);
+  });
+
+  it('uses Oxford comma in multi-item role lists', () => {
+    const dashboards = LANDING_HERO_HIGHLIGHTS.find((h) => h.includes('Dashboards'));
+    expect(dashboards).toMatch(/students, teachers, parents, and school administrators/);
   });
 
   it('includes sign-up oriented hero highlights', () => {

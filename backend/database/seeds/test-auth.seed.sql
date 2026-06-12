@@ -45,7 +45,8 @@ ON CONFLICT (id) DO UPDATE SET
   school_id = EXCLUDED.school_id,
   password_hash = EXCLUDED.password_hash,
   grade = 'Class 5',
-  section = 'A';
+  section = 'A',
+  parent_email = 'parent@test.school';
 
 INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active)
 VALUES (

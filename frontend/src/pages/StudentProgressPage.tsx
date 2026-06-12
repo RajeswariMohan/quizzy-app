@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Search } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { StudentProgressTable } from '@/components/progress/StudentProgressTable';
+import { EngagementFilterFields } from '@/components/engagement/EngagementFilterFields';
 import { FilterPanel } from '@/components/layout/FilterPanel';
 import { PageWithScrollBelowFilter } from '@/components/layout/PageWithScrollBelowFilter';
 import { Card } from '@/components/ui/Card';
@@ -10,8 +11,18 @@ import {
   type ProgressStudentsQuery,
   type StudentProgressRow,
 } from '@/api/progress.api';
+import type { EngagementQuery } from '@/api/engagement.api';
 import { getApiErrorMessage, logApiError } from '@/api/client';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useSchoolAcademics } from '@/hooks/useSchoolAcademics';
+import { defaultEngagementDateRange } from '@/lib/dateRange';
+import {
+  DEFAULT_ACADEMIC_GROUP_FILTER,
+  resolveFilterSectionValue,
+  type AcademicGroupFilterValues,
+} from '@/utils/gradeStructure';
+import { sortGrades } from '@/utils/academicOptions';
+import { GRADES } from '@/constants/academics';
 import { EngagementPanel } from '@/components/engagement/EngagementPanel';
 import { useAuthStore } from '@/store/authStore';
 import { useSchoolFilterStore } from '@/store/schoolFilterStore';
@@ -22,15 +33,44 @@ import {
   type StudentProgressStatusFilter,
 } from '@/utils/studentProgressStatus';
 
+const ENGAGEMENT_DEFAULT_DAYS = 30;
+
+function hasActiveDirectoryFilters(
+  search: string,
+  filterGrade: string,
+  filterAcademicGroup: AcademicGroupFilterValues,
+): boolean {
+  return (
+    search.trim() !== '' ||
+    filterGrade !== '' ||
+    filterAcademicGroup.department !== 'All' ||
+    filterAcademicGroup.sectionLetter !== 'All' ||
+    filterAcademicGroup.group !== 'All'
+  );
+}
+
 export function StudentProgressPage() {
   const role = useAuthStore((s) => s.user?.role);
   const isParent = role === 'PARENT';
   const canFilterClass = role === 'TEACHER' || role === 'SCHOOL_ADMIN' || role === 'SUPER_ADMIN';
 
-  const { grades: gradeOptions, sections: sectionOptions } = useSchoolAcademics();
+  const engagementDefaultRange = useMemo(
+    () => defaultEngagementDateRange(ENGAGEMENT_DEFAULT_DAYS),
+    [],
+  );
+  const [engagementFilters, setEngagementFilters] = useState<EngagementQuery>(() => ({
+    ...engagementDefaultRange,
+  }));
+  const [engagementRefreshKey, setEngagementRefreshKey] = useState(0);
+
+  const { grades: gradeOptions, gradeSections } = useSchoolAcademics();
   const [items, setItems] = useState<StudentProgressRow[]>([]);
-  const [filters, setFilters] = useState<ProgressStudentsQuery>({});
+  const [filterGrade, setFilterGrade] = useState('');
+  const [filterAcademicGroup, setFilterAcademicGroup] = useState<AcademicGroupFilterValues>({
+    ...DEFAULT_ACADEMIC_GROUP_FILTER,
+  });
   const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebouncedValue(searchInput, 300);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StudentProgressStatusFilter>('all');
@@ -40,8 +80,17 @@ export function StudentProgressPage() {
   const load = useCallback(() => {
     setIsLoading(true);
     setError(null);
-    const query: ProgressStudentsQuery = { ...filters };
-    if (searchInput.trim()) query.search = searchInput.trim();
+    const query: ProgressStudentsQuery = {};
+    if (debouncedSearch.trim()) query.search = debouncedSearch.trim();
+    if (filterGrade) query.grade = filterGrade;
+    const sectionValue = filterGrade
+      ? resolveFilterSectionValue({
+          grade: filterGrade,
+          gradeSections,
+          ...filterAcademicGroup,
+        })
+      : undefined;
+    if (sectionValue) query.section = sectionValue;
 
     fetchProgressStudents(query)
       .then((res) => setItems(res.items))
@@ -50,25 +99,58 @@ export function StudentProgressPage() {
         setError(getApiErrorMessage(err, 'Could not load student progress.'));
       })
       .finally(() => setIsLoading(false));
-  }, [filters, searchInput, filterVersion]);
+  }, [debouncedSearch, filterGrade, filterAcademicGroup, gradeSections, filterVersion]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const derivedGrades = useMemo(
-    () =>
-      gradeOptions.length > 0
-        ? gradeOptions
-        : [...new Set(items.map((s) => s.grade).filter(Boolean) as string[])].sort(),
-    [gradeOptions, items],
+  const refreshAll = useCallback(() => {
+    setEngagementRefreshKey((k) => k + 1);
+    load();
+  }, [load]);
+
+  const derivedGrades = useMemo(() => {
+    const fromItems = [
+      ...new Set(items.map((s) => s.grade).filter(Boolean) as string[]),
+    ];
+    const order = gradeOptions.length > 0 ? gradeOptions : GRADES;
+    const pool = gradeOptions.length > 0 ? gradeOptions : fromItems;
+    return sortGrades(pool, order);
+  }, [gradeOptions, items]);
+
+  const hasActiveServerFilters = useMemo(
+    () => hasActiveDirectoryFilters(searchInput, filterGrade, filterAcademicGroup),
+    [searchInput, filterGrade, filterAcademicGroup],
   );
-  const derivedSections = useMemo(
+
+  const directoryFilters = useMemo(
     () =>
-      sectionOptions.length > 0
-        ? sectionOptions
-        : [...new Set(items.map((s) => s.section).filter(Boolean) as string[])].sort(),
-    [sectionOptions, items],
+      canFilterClass
+        ? {
+            search: searchInput,
+            onSearchChange: setSearchInput,
+            filterGrade,
+            onFilterGradeChange: (grade: string) => {
+              setFilterGrade(grade);
+              setFilterAcademicGroup({ ...DEFAULT_ACADEMIC_GROUP_FILTER });
+            },
+            filterAcademicGroup,
+            onFilterAcademicGroupChange: setFilterAcademicGroup,
+            gradeOptions: derivedGrades,
+            gradeSections,
+            hasActiveServerFilters,
+          }
+        : undefined,
+    [
+      canFilterClass,
+      searchInput,
+      filterGrade,
+      filterAcademicGroup,
+      derivedGrades,
+      gradeSections,
+      hasActiveServerFilters,
+    ],
   );
 
   const displayedItems = useMemo(() => {
@@ -90,7 +172,7 @@ export function StudentProgressPage() {
                 : 'Track quiz attempts, scores, grade, section, and last activity per student'}
             </p>
           </div>
-          <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>
+          <Button variant="outline" size="sm" onClick={refreshAll} disabled={isLoading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
@@ -99,81 +181,43 @@ export function StudentProgressPage() {
       filter={
         canFilterClass ? (
           <FilterPanel>
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="min-w-[140px] flex-1">
-                <label className="mb-1 block text-xs font-medium text-muted">Search</label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-                  <input
-                    type="search"
-                    placeholder="Name or email"
-                    className="w-full rounded-xl border border-gray-200 py-2 pl-9 pr-3 text-sm"
-                    value={searchInput}
-                    onChange={(e) => setSearchInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && load()}
-                  />
-                </div>
-              </div>
-              <div className="min-w-[120px]">
-                <label className="mb-1 block text-xs font-medium text-muted">Grade</label>
-                <select
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
-                  value={filters.grade ?? ''}
-                  onChange={(e) =>
-                    setFilters((f) => ({ ...f, grade: e.target.value || undefined }))
-                  }
-                >
-                  <option value="">All grades</option>
-                  {derivedGrades.map((g) => (
-                    <option key={g} value={g}>
-                      {g}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="min-w-[120px]">
-                <label className="mb-1 block text-xs font-medium text-muted">Section</label>
-                <select
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
-                  value={filters.section ?? ''}
-                  onChange={(e) =>
-                    setFilters((f) => ({ ...f, section: e.target.value || undefined }))
-                  }
-                >
-                  <option value="">All sections</option>
-                  {derivedSections.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <Button size="sm" onClick={load} disabled={isLoading}>
-                Apply
-              </Button>
+            <p className="text-sm font-medium text-ink">Engagement (session time)</p>
+            <p className="mt-0.5 text-xs text-muted">
+              Date range for charts and session totals below
+            </p>
+            <div className="mt-2">
+              <EngagementFilterFields
+                filters={engagementFilters}
+                defaultRange={engagementDefaultRange}
+                onChange={setEngagementFilters}
+                idPrefix="progress-engagement"
+              />
             </div>
           </FilterPanel>
         ) : undefined
       }
     >
       {error && (
-          <Card>
-            <p className="text-danger">{error}</p>
-          </Card>
-        )}
+        <Card>
+          <p className="text-danger">{error}</p>
+        </Card>
+      )}
 
-        {canFilterClass && <EngagementPanel />}
+      {canFilterClass && (
+        <EngagementPanel filters={engagementFilters} refreshKey={engagementRefreshKey} />
+      )}
 
-        <StudentProgressTable
-          items={displayedItems}
-          totalCount={items.length}
-          isLoading={isLoading}
-          isParent={isParent}
-          statusFilter={statusFilter}
-          sortBy={sortBy}
-          onStatusFilterChange={setStatusFilter}
-          onSortChange={setSortBy}
-        />
+      <StudentProgressTable
+        items={displayedItems}
+        totalCount={items.length}
+        isLoading={isLoading}
+        isParent={isParent}
+        statusFilter={statusFilter}
+        sortBy={sortBy}
+        onStatusFilterChange={setStatusFilter}
+        onSortChange={setSortBy}
+        directoryFilters={directoryFilters}
+      />
     </PageWithScrollBelowFilter>
   );
 }

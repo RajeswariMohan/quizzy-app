@@ -32,6 +32,7 @@ export function StudentTakeQuizPage() {
   const navigate = useNavigate();
   const [quiz, setQuiz] = useState<StudentQuizDetail | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [pendingSelection, setPendingSelection] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<SubmitResponseResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -51,9 +52,9 @@ export function StudentTakeQuizPage() {
   }, [quizId]);
 
   const question = quiz?.questions[activeIndex];
-  const selected =
+  const savedSelection =
     question?.selectedOptionIndex != null ? Number(question.selectedOptionIndex) : null;
-  const alreadyAnswered = selected !== null;
+  const isSubmitted = savedSelection !== null;
 
   const priorFeedback = useMemo(
     () => (question ? priorToFeedback(question) : null),
@@ -61,21 +62,31 @@ export function StudentTakeQuizPage() {
   );
 
   const displayFeedback = feedback ?? priorFeedback;
+  const isLocked = isSubmitted;
+  const highlightedIndex = isSubmitted ? savedSelection : pendingSelection;
 
   useEffect(() => {
     setSubmitError(null);
     setFeedback(null);
+    setPendingSelection(null);
   }, [activeIndex]);
 
-  const handleSelect = async (optionIndex: number) => {
-    if (!quizId || !question || isSubmitting) return;
+  const handleSelect = (optionIndex: number) => {
+    if (!question || isSubmitting || isLocked) return;
+    setPendingSelection(optionIndex);
+    setSubmitError(null);
+  };
+
+  const handleSubmit = async () => {
+    if (!quizId || !question || isSubmitting || isLocked || pendingSelection === null) {
+      return;
+    }
     setIsSubmitting(true);
-    setFeedback(null);
     setSubmitError(null);
     try {
       const result = await submitStudentResponse(quizId, {
         questionId: question.id,
-        selectedOptionIndex: optionIndex,
+        selectedOptionIndex: pendingSelection,
       });
       setFeedback(result);
       setQuiz((prev) => {
@@ -84,7 +95,7 @@ export function StudentTakeQuizPage() {
           q.id === question.id
             ? {
                 ...q,
-                selectedOptionIndex: optionIndex,
+                selectedOptionIndex: pendingSelection,
                 priorAnswer: {
                   isCorrect: result.isCorrect,
                   pointsEarned: result.pointsEarned,
@@ -96,6 +107,7 @@ export function StudentTakeQuizPage() {
         );
         return { ...prev, questions };
       });
+      setPendingSelection(null);
     } catch (err) {
       logApiError('Submit answer failed', err);
       setSubmitError(getApiErrorMessage(err, 'Could not save your answer.'));
@@ -176,15 +188,13 @@ export function StudentTakeQuizPage() {
 
         <p className="mt-6 text-lg font-medium text-ink">{question.questionText}</p>
 
-        {alreadyAnswered && !feedback && (
-          <p className="mt-3 text-sm text-muted">
-            Your previous answer is highlighted below. Tap another option to change it.
-          </p>
+        {!isLocked && (
+          <p className="mt-3 text-sm text-muted">Choose an option, then submit your answer.</p>
         )}
 
         <div className="mt-4 space-y-2">
           {question.options.map((opt, idx) => {
-            const isSelected = selected === idx;
+            const isSelected = highlightedIndex === idx;
             const showCorrect = displayFeedback && idx === displayFeedback.correctOptionIndex;
             const showWrong = displayFeedback && isSelected && !displayFeedback.isCorrect;
 
@@ -192,16 +202,20 @@ export function StudentTakeQuizPage() {
               <button
                 key={idx}
                 type="button"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isLocked}
                 onClick={() => handleSelect(idx)}
                 className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm transition ${
+                  isLocked ? 'cursor-default' : ''
+                } ${
                   showCorrect
                     ? 'border-success bg-success/10'
                     : showWrong
                       ? 'border-danger bg-danger/10'
                       : isSelected
                         ? 'border-primary bg-primary/10 ring-2 ring-primary/30'
-                        : 'border-gray-200 hover:border-primary/40'
+                        : isLocked
+                          ? 'border-gray-200 opacity-80'
+                          : 'border-gray-200 hover:border-primary/40'
                 }`}
               >
                 <span
@@ -224,6 +238,19 @@ export function StudentTakeQuizPage() {
 
         {submitError && (
           <p className="mt-4 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{submitError}</p>
+        )}
+
+        {!isLocked && pendingSelection !== null && (
+          <div className="mt-4">
+            <Button
+              type="button"
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="w-full sm:w-auto"
+            >
+              {isSubmitting ? 'Submitting…' : 'Submit answer'}
+            </Button>
+          </div>
         )}
 
         {displayFeedback && (
@@ -263,7 +290,7 @@ export function StudentTakeQuizPage() {
           ) : (
             <span />
           )}
-          <Button onClick={goNext} disabled={selected === null}>
+          <Button onClick={goNext} disabled={!isSubmitted}>
             {activeIndex < quiz.questions.length - 1 ? 'Next question' : 'Finish quiz'}
           </Button>
         </div>

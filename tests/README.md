@@ -102,7 +102,8 @@ cd backend && bash scripts/test-db-prep.sh
 
 ## What is covered
 
-- **Auth & RBAC** — login, register, dev token, tenant context, permissions (happy + negative)
+- **Auth & RBAC** — login, register (school picker, parent email auto-link), dev token, tenant context, permissions (happy + negative)
+- **Parent linking** — student `parentEmail` at signup, parent auto-link on register, manual link disabled
 - **Teacher dashboard** — full `quizSummaryList`, capped `recentQuizzes`, analytics query validation (e2e)
 - **Quizzes & questions** — create, publish, delete draft questions
 - **Student flow** — taking quizzes, responses

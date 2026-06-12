@@ -1,60 +1,27 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardTitle } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
 import { ActivityTimeline } from '@/components/parent/ActivityTimeline';
 import { UpsellCard } from '@/components/parent/UpsellCard';
 import {
   fetchLinkedChildren,
   fetchParentChildSummary,
-  linkStudentByEmail,
   type LinkedChild,
   type ParentChildSummary,
 } from '@/api/parent.api';
 import { getApiErrorMessage, logApiError } from '@/api/client';
 import type { ActivityEvent } from '@/types/dashboard';
 
-function LinkChildForm({ onLinked }: { onLinked: () => void }) {
-  const [email, setEmail] = useState('');
-  const [isLinking, setIsLinking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLinking(true);
-    setError(null);
-    try {
-      await linkStudentByEmail(email.trim());
-      onLinked();
-    } catch (err) {
-      logApiError('Link student failed', err);
-      setError(getApiErrorMessage(err, 'Could not link student.'));
-    } finally {
-      setIsLinking(false);
-    }
-  };
-
+function NoLinkedChildrenMessage() {
   return (
     <Card>
-      <CardTitle>Link your child</CardTitle>
-      <p className="mt-1 text-sm text-muted">
-        Enter the email your child uses at school. They must already have a student account
-        in the same school.
+      <CardTitle>No linked students yet</CardTitle>
+      <p className="mt-2 text-sm text-muted">
+        Your child must register first and enter your email as their parent contact. When you sign
+        up, use that same email and select the same school. If you already did and still see this
+        message, verify the email and school match your child&apos;s signup details or contact your
+        school administrator for help.
       </p>
-      <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-        <input
-          type="email"
-          required
-          placeholder="student@school.com"
-          className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        {error && <p className="text-sm text-danger">{error}</p>}
-        <Button type="submit" disabled={isLinking || !email.trim()}>
-          {isLinking ? 'Linking…' : 'Link student'}
-        </Button>
-      </form>
     </Card>
   );
 }
@@ -128,9 +95,9 @@ export function ParentDashboard() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-ink">Parent insights</h1>
-          <p className="text-muted">Link your child to view their quiz progress</p>
+          <p className="text-muted">View your child&apos;s quiz progress after they register</p>
         </div>
-        <LinkChildForm onLinked={() => void refresh()} />
+        <NoLinkedChildrenMessage />
       </div>
     );
   }
@@ -141,7 +108,7 @@ export function ParentDashboard() {
         <Card>
           <p className="text-danger">{error}</p>
         </Card>
-        <LinkChildForm onLinked={() => void refresh()} />
+        <NoLinkedChildrenMessage />
       </div>
     );
   }
@@ -268,8 +235,6 @@ export function ParentDashboard() {
           <p className="mt-3 text-sm text-muted">No quiz activity recorded yet.</p>
         )}
       </Card>
-
-      <LinkChildForm onLinked={() => void refresh()} />
     </div>
   );
 }

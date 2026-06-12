@@ -29,6 +29,10 @@ export class User {
   @Column({ type: 'varchar', length: 320 })
   email: string;
 
+  /** School-scoped login id for students (unique per school). */
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  username: string | null;
+
   @Column({ name: 'password_hash', type: 'varchar', length: 255, select: false })
   passwordHash: string;
 
@@ -54,6 +58,14 @@ export class User {
   /** Class section for students (matches school section_options). */
   @Column({ type: 'varchar', length: 20, nullable: true })
   section: string | null;
+
+  /** Parent contact email supplied at student self-service signup. */
+  @Column({ name: 'parent_email', type: 'varchar', length: 320, nullable: true })
+  parentEmail: string | null;
+
+  /** Free-text school name/address when student selects "Other" at signup. */
+  @Column({ name: 'signup_school_note', type: 'text', nullable: true })
+  signupSchoolNote: string | null;
 
   @Column({ name: 'xp_points', type: 'int', default: 0 })
   xpPoints: number;

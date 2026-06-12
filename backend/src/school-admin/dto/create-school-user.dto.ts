@@ -1,11 +1,25 @@
-import { IsEmail, IsEnum, IsString, MinLength, ValidateIf } from 'class-validator';
+import {
+  IsEmail,
+  IsEnum,
+  IsOptional,
+  IsString,
+  MinLength,
+  ValidateIf,
+} from 'class-validator';
 import { UserRole } from '@database/enums/user-role.enum';
 
 const ONBOARD_ROLES = [UserRole.TEACHER, UserRole.STUDENT, UserRole.PARENT] as const;
 
 export class CreateSchoolUserDto {
+  @ValidateIf((dto: CreateSchoolUserDto) => dto.role !== UserRole.STUDENT)
   @IsEmail()
-  email: string;
+  email?: string;
+
+  /** Required for students — school-scoped login id */
+  @ValidateIf((dto: CreateSchoolUserDto) => dto.role === UserRole.STUDENT)
+  @IsString()
+  @MinLength(1)
+  username?: string;
 
   @IsString()
   @MinLength(8)
@@ -31,4 +45,9 @@ export class CreateSchoolUserDto {
   @IsString()
   @MinLength(1)
   section?: string;
+
+  /** Required for students — parent contact for auto-linking when parent registers */
+  @ValidateIf((dto) => dto.role === UserRole.STUDENT)
+  @IsEmail()
+  parentEmail?: string;
 }

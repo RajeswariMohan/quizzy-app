@@ -7,7 +7,7 @@ import { Question } from '@database/entities/question.entity';
 import { Quiz } from '@database/entities/quiz.entity';
 import { QuestionSourceType } from '@database/enums/question-source-type.enum';
 import { buildTeacherTenant } from '../../test/helpers/tenant-fixtures';
-import { SCHOOL_ID, TEST_QUIZ_ID } from '../../test/helpers/constants';
+import { SCHOOL_ID, TEACHER_ID, TEST_QUIZ_ID } from '../../test/helpers/constants';
 import { TenantContextService } from '../auth/services/tenant-context.service';
 import { QuestionService } from './question.service';
 
@@ -34,6 +34,7 @@ describe('QuestionService', () => {
     quizFindOne = jest.fn().mockResolvedValue({
       id: TEST_QUIZ_ID,
       schoolId: SCHOOL_ID,
+      createdByUserId: TEACHER_ID,
       status: QuizStatus.DRAFT,
     });
 
@@ -136,6 +137,7 @@ describe('QuestionService', () => {
     quizFindOne.mockResolvedValue({
       id: TEST_QUIZ_ID,
       schoolId: SCHOOL_ID,
+      createdByUserId: TEACHER_ID,
       status: QuizStatus.PUBLISHED,
     });
 

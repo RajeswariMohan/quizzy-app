@@ -7,6 +7,7 @@ import { QuizStatus } from '@database/enums/quiz-status.enum';
 import { Quiz } from '@database/entities/quiz.entity';
 import { TenantContext } from '../auth/interfaces/tenant-context.interface';
 import { TenantContextService } from '../auth/services/tenant-context.service';
+import { assertQuizManageAccess } from '../quiz/quiz-access.util';
 import { CreateManualQuestionDto } from './dto/create-manual-question.dto';
 import { UpdateQuestionDto } from './dto/update-question.dto';
 
@@ -26,9 +27,9 @@ export class QuestionService {
     quizId: string,
     dto: CreateManualQuestionDto,
   ): Promise<Question> {
-    const schoolId = this.tenantContextService.resolveSchoolIdForQuery(tenant);
-    await this.assertQuizInTenant(schoolId, quizId);
+    await this.assertQuizInTenant(tenant, quizId);
 
+    const schoolId = this.tenantContextService.resolveSchoolIdForQuery(tenant);
     const orderIndex =
       dto.orderIndex ??
       (await this.questionRepository.count({ where: { schoolId, quizId } }));
@@ -55,9 +56,9 @@ export class QuestionService {
     quizId: string,
     questions: CreateManualQuestionDto[],
   ): Promise<{ importedCount: number; questionIds: string[] }> {
-    const schoolId = this.tenantContextService.resolveSchoolIdForQuery(tenant);
-    await this.assertQuizInTenant(schoolId, quizId);
+    await this.assertQuizInTenant(tenant, quizId);
 
+    const schoolId = this.tenantContextService.resolveSchoolIdForQuery(tenant);
     let orderIndex = await this.questionRepository.count({
       where: { schoolId, quizId },
     });
@@ -94,7 +95,7 @@ export class QuestionService {
     dto: UpdateQuestionDto,
   ): Promise<Question> {
     const schoolId = this.tenantContextService.resolveSchoolIdForQuery(tenant);
-    await this.assertDraftQuiz(schoolId, quizId);
+    await this.assertDraftQuiz(tenant, quizId);
 
     const question = await this.questionRepository.findOne({
       where: { id: questionId, quizId, schoolId },
@@ -119,7 +120,7 @@ export class QuestionService {
     questionId: string,
   ): Promise<{ deleted: true; remainingCount: number }> {
     const schoolId = this.tenantContextService.resolveSchoolIdForQuery(tenant);
-    await this.assertDraftQuiz(schoolId, quizId);
+    await this.assertDraftQuiz(tenant, quizId);
 
     const question = await this.questionRepository.findOne({
       where: { id: questionId, quizId, schoolId },
@@ -153,7 +154,7 @@ export class QuestionService {
 
   async listByQuiz(tenant: TenantContext, quizId: string): Promise<Question[]> {
     const schoolId = this.tenantContextService.resolveSchoolIdForQuery(tenant);
-    await this.assertQuizInTenant(schoolId, quizId);
+    await this.assertQuizInTenant(tenant, quizId);
 
     return this.questionRepository.find({
       where: { schoolId, quizId },
@@ -161,18 +162,22 @@ export class QuestionService {
     });
   }
 
-  private async assertQuizInTenant(schoolId: string, quizId: string): Promise<void> {
+  private async assertQuizInTenant(tenant: TenantContext, quizId: string): Promise<void> {
+    const schoolId = this.tenantContextService.resolveSchoolIdForQuery(tenant);
     const quiz = await this.quizRepository.findOne({ where: { id: quizId, schoolId } });
     if (!quiz) {
       throw new NotFoundException('Quiz not found');
     }
+    assertQuizManageAccess(tenant, quiz);
   }
 
-  private async assertDraftQuiz(schoolId: string, quizId: string): Promise<Quiz> {
+  private async assertDraftQuiz(tenant: TenantContext, quizId: string): Promise<Quiz> {
+    const schoolId = this.tenantContextService.resolveSchoolIdForQuery(tenant);
     const quiz = await this.quizRepository.findOne({ where: { id: quizId, schoolId } });
     if (!quiz) {
       throw new NotFoundException('Quiz not found');
     }
+    assertQuizManageAccess(tenant, quiz);
     if (quiz.status !== QuizStatus.DRAFT) {
       throw new BadRequestException(
         'Quiz must be unpublished (draft) before editing questions',

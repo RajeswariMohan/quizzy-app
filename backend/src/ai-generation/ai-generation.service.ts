@@ -13,6 +13,8 @@ import { QuestionSourceType } from '@database/enums/question-source-type.enum';
 import { Quiz } from '@database/entities/quiz.entity';
 import { TenantContext } from '../auth/interfaces/tenant-context.interface';
 import { TenantContextService } from '../auth/services/tenant-context.service';
+import { assertQuizManageAccess } from '../quiz/quiz-access.util';
+import { SchoolFeatureService } from '../school/school-feature.service';
 import { MOCK_LLM_MODEL, MockLlmService } from '../llm/mock-llm.service';
 import { parseStructuredLlmOutput } from '../llm/llm-output.validator';
 import { AI_QUESTION_GENERATION_QUEUE } from '../queue/queue.constants';
@@ -31,6 +33,7 @@ export class AiGenerationService {
     @InjectQueue(AI_QUESTION_GENERATION_QUEUE)
     private readonly aiQueue: Queue<AiGenerationJobData>,
     private readonly tenantContextService: TenantContextService,
+    private readonly schoolFeatureService: SchoolFeatureService,
     private readonly mockLlmService: MockLlmService,
   ) {}
 
@@ -40,7 +43,8 @@ export class AiGenerationService {
     dto: AiGenerateQuestionsDto,
   ): Promise<{ taskId: string; status: AiGenerationStatus; jobId: string }> {
     const schoolId = this.tenantContextService.resolveSchoolIdForQuery(tenant);
-    await this.assertQuizInTenant(schoolId, quizId);
+    await this.schoolFeatureService.assertFeature(schoolId, 'aiGenerationEnabled');
+    await this.assertQuizInTenant(tenant, quizId);
 
     const task = this.taskRepository.create({
       schoolId,
@@ -201,11 +205,13 @@ export class AiGenerationService {
     });
   }
 
-  private async assertQuizInTenant(schoolId: string, quizId: string): Promise<Quiz> {
+  private async assertQuizInTenant(tenant: TenantContext, quizId: string): Promise<Quiz> {
+    const schoolId = this.tenantContextService.resolveSchoolIdForQuery(tenant);
     const quiz = await this.quizRepository.findOne({ where: { id: quizId, schoolId } });
     if (!quiz) {
       throw new NotFoundException('Quiz not found');
     }
+    assertQuizManageAccess(tenant, quiz);
     return quiz;
   }
 }

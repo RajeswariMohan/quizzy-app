@@ -19,10 +19,10 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/cn';
-import { SuperAdminSchoolFilter } from '@/components/admin/SuperAdminSchoolFilter';
 import { useAuthStore } from '@/store/authStore';
 import { useSessionTracker } from '@/hooks/useSessionTracker';
 import { useTenantTheme } from '@/hooks/useTenantTheme';
+import { useSchoolFeatures } from '@/hooks/useSchoolFeatures';
 import type { UserRole } from '@/types/auth';
 import { roleHome } from '@/utils/roleHome';
 
@@ -102,8 +102,9 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/school-admin/data', label: 'Backup', icon: Database, roles: ['SCHOOL_ADMIN'] },
   { to: '/admin', label: 'Platform', icon: LayoutDashboard, roles: ['SUPER_ADMIN'], end: true },
   { to: '/admin/schools', label: 'Schools', icon: Building2, roles: ['SUPER_ADMIN'] },
+  { to: '/admin/packages', label: 'Packages', icon: SlidersHorizontal, roles: ['SUPER_ADMIN'] },
   { to: '/admin/analytics', label: 'Analytics', icon: BarChart3, roles: ['SUPER_ADMIN'] },
-  { to: '/admin/settings', label: 'Features', icon: SlidersHorizontal, roles: ['SUPER_ADMIN'] },
+  { to: '/admin/settings', label: 'Features', icon: Settings, roles: ['SUPER_ADMIN'] },
   { to: '/admin/feedback', label: 'Feedback', icon: MessageSquare, roles: ['SUPER_ADMIN'] },
   { to: '/admin/data', label: 'Backup', icon: Database, roles: ['SUPER_ADMIN'] },
   {
@@ -129,7 +130,13 @@ export function DashboardLayout() {
   const navigate = useNavigate();
   useSessionTracker();
 
-  const items = NAV_ITEMS.filter((item) => user && item.roles.includes(user.role));
+  const { features } = useSchoolFeatures();
+
+  const items = NAV_ITEMS.filter((item) => {
+    if (!user || !item.roles.includes(user.role)) return false;
+    if (item.to === '/student/leaderboard' && !features.studentLeaderboardEnabled) return false;
+    return true;
+  });
   const settingsPath = user?.role === 'SUPER_ADMIN' ? '/admin/settings' : undefined;
 
   const handleLogout = async () => {
@@ -277,7 +284,6 @@ export function DashboardLayout() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            {user?.role === 'SUPER_ADMIN' && <SuperAdminSchoolFilter />}
             <div className="relative">
               <button
                 type="button"

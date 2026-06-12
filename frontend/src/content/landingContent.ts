@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   BarChart3,
   BookOpenCheck,
+  GraduationCap,
   ShieldCheck,
   Sparkles,
   Trophy,
@@ -19,7 +20,7 @@ export const LANDING_FEATURES: LandingFeature[] = [
     icon: BookOpenCheck,
     title: 'Curriculum-aligned quizzes',
     description:
-      'Teachers publish quizzes by grade and subject. Students receive immediate feedback so misconceptions can be addressed early.',
+      'Teachers publish quizzes by grade and subject. Students receive immediate feedback, so misconceptions can be addressed early.',
   },
   {
     icon: Trophy,
@@ -31,7 +32,7 @@ export const LANDING_FEATURES: LandingFeature[] = [
     icon: BarChart3,
     title: 'Analytics you can act on',
     description:
-      'Review accuracy, participation, and trends by class, grade level, and quiz creator. Use the results to plan your next lesson with confidence.',
+      'Review accuracy, participation, and trends by grade, subject, and quiz creator. Use the results to plan your next lesson with confidence.',
   },
   {
     icon: ShieldCheck,
@@ -45,7 +46,7 @@ export const LANDING_STEPS = [
   {
     step: '1',
     title: 'Connect with your school',
-    body: 'Students, teachers, and parents register with a school email address. Parents can link to a student account during sign-up.',
+    body: 'Students and parents select their school at signup. Students enter a parent email; parents register with that same email to connect automatically. Teachers join with their school email.',
   },
   {
     step: '2',
@@ -55,7 +56,7 @@ export const LANDING_STEPS = [
   {
     step: '3',
     title: 'Measure progress together',
-    body: 'Students track their growth. Teachers and administrators review class results. Parents follow progress for linked children.',
+    body: 'Students track their growth. Teachers and administrators review results by grade. Parents follow progress for linked children.',
   },
 ] as const;
 
@@ -68,14 +69,29 @@ export const LANDING_AUDIENCES = [
   },
   {
     icon: Users,
-    title: 'Teachers and parents',
+    title: 'Teachers',
     description:
-      'Create and assign quizzes, monitor accuracy, and support learning at school and at home.',
+      'Create and assign quizzes, monitor accuracy by grade, and focus reteaching where it matters most.',
+  },
+  {
+    icon: GraduationCap,
+    title: 'Parents',
+    description:
+      'Follow linked children at home with progress views you can discuss as a family.',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'School administrators',
+    description:
+      'Manage users, grades, and academics from one secure, school-scoped portal.',
   },
 ] as const;
 
 export const LANDING_HERO_HIGHLIGHTS = [
   'Immediate feedback on every question',
   'School-wide leaderboards and progress tracking',
-  'Dashboards for students, teachers, parents, and administrators',
+  'Dashboards for students, teachers, parents, and school administrators',
 ] as const;
+
+export const LANDING_COMMUNITY_SUMMARY =
+  'Students stay engaged with structured practice. Teachers spend less time guessing which students need support. Parents see progress they can discuss at home. School administrators manage users, grades, and academics from one secure portal.';

@@ -54,6 +54,64 @@ export class ParentStudentLinkService {
     return this.createLink(parentUserId, schoolId, student.id);
   }
 
+  async assertStudentsForParentEmail(schoolId: string, parentEmail: string): Promise<void> {
+    const count = await this.countStudentsForParentEmail(schoolId, parentEmail);
+    if (count === 0) {
+      throw new NotFoundException(
+        'No student has registered with this email as parent contact at this school.',
+      );
+    }
+  }
+
+  async linkByParentEmail(
+    parentUserId: string,
+    schoolId: string,
+    parentEmail: string,
+  ): Promise<User[]> {
+    const email = parentEmail.trim().toLowerCase();
+    const students = await this.findStudentsForParentEmail(schoolId, email);
+
+    if (students.length === 0) {
+      throw new NotFoundException(
+        'No student has registered with this email as parent contact at this school.',
+      );
+    }
+
+    const linked: User[] = [];
+    for (const student of students) {
+      linked.push(await this.createLink(parentUserId, schoolId, student.id));
+    }
+    return linked;
+  }
+
+  private async countStudentsForParentEmail(
+    schoolId: string,
+    parentEmail: string,
+  ): Promise<number> {
+    const email = parentEmail.trim().toLowerCase();
+    return this.usersRepository
+      .createQueryBuilder('u')
+      .where('u.school_id = :schoolId', { schoolId })
+      .andWhere('u.role = :role', { role: UserRole.STUDENT })
+      .andWhere('u.is_active = true')
+      .andWhere('LOWER(u.parent_email) = :email', { email })
+      .getCount();
+  }
+
+  private async findStudentsForParentEmail(
+    schoolId: string,
+    parentEmail: string,
+  ): Promise<User[]> {
+    const email = parentEmail.trim().toLowerCase();
+    return this.usersRepository
+      .createQueryBuilder('u')
+      .where('u.school_id = :schoolId', { schoolId })
+      .andWhere('u.role = :role', { role: UserRole.STUDENT })
+      .andWhere('u.is_active = true')
+      .andWhere('LOWER(u.parent_email) = :email', { email })
+      .getMany();
+  }
+
   async createLink(
     parentUserId: string,
     schoolId: string,
@@ -110,7 +168,7 @@ export class ParentStudentLinkService {
 
     if (students.length === 0) {
       throw new NotFoundException(
-        'No linked students. Link your child using their school email.',
+        'No linked students. Your child must register first using your email as parent contact.',
       );
     }
 

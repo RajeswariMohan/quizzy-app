@@ -6,6 +6,8 @@ interface FieldSelectProps {
   disabled?: boolean;
   required?: boolean;
   placeholder?: string;
+  compact?: boolean;
+  className?: string;
 }
 
 export function FieldSelect({
@@ -16,14 +18,28 @@ export function FieldSelect({
   disabled = false,
   required = false,
   placeholder,
+  compact = false,
+  className,
 }: FieldSelectProps) {
   return (
-    <div>
-      <label className="mb-1 block text-sm font-medium text-ink">{label}</label>
+    <div className={className}>
+      <label
+        className={
+          compact
+            ? 'mb-0.5 block text-xs font-medium text-muted'
+            : 'mb-1 block text-sm font-medium text-ink'
+        }
+      >
+        {label}
+      </label>
       <select
         required={required}
         disabled={disabled}
-        className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary disabled:bg-gray-50"
+        className={
+          compact
+            ? 'w-full rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-primary disabled:bg-gray-50'
+            : 'w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary disabled:bg-gray-50'
+        }
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >

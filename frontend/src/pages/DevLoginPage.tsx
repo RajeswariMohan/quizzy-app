@@ -23,7 +23,7 @@ export function DevLoginPage() {
   const finishIfAuthenticated = () => {
     const state = useAuthStore.getState();
     if (state.isAuthenticated && state.user) {
-      navigate(roleHome(state.user.role));
+      navigate(roleHome(state.user.role), { replace: true });
     }
   };
 
@@ -45,7 +45,8 @@ export function DevLoginPage() {
         </Link>
         <h1 className="text-lg font-bold text-ink">Developer token login</h1>
         <p className="mt-1 text-sm text-muted">
-          Quick login uses the running API so the JWT secret always matches.
+          Quick login uses the running API so the JWT secret always matches. You are sent to that
+          role&apos;s dashboard after sign-in.
         </p>
         <p className="mt-2 text-xs text-muted">
           <strong>Admin</strong> = school admin ({' '}

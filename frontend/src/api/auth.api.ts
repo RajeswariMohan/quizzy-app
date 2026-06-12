@@ -8,26 +8,46 @@ export interface AuthTokenResponse {
 }
 
 export interface RegisterPayload {
-  email: string;
+  email?: string;
+  username?: string;
   password: string;
   firstName: string;
   lastName: string;
   role: Extract<UserRole, 'STUDENT' | 'PARENT' | 'TEACHER'>;
+  schoolId?: string;
   board?: string;
   grade?: string;
-  subject?: string;
-  /** Parent only: link to existing student at signup */
-  studentEmail?: string;
+  section?: string;
+  parentEmail?: string;
+  /** Student only: when school is not listed */
+  signupSchoolNote?: string;
+}
+
+export interface UsernameAvailabilityResponse {
+  available: boolean;
+  username?: string;
+  reason?: string;
 }
 
 export async function loginWithPassword(
-  email: string,
+  identifier: string,
   password: string,
 ): Promise<AuthTokenResponse> {
   const { data } = await apiClient.post<AuthTokenResponse>('/auth/login', {
-    email,
+    identifier,
     password,
   });
+  return data;
+}
+
+export async function checkUsernameAvailability(
+  schoolId: string,
+  username: string,
+): Promise<UsernameAvailabilityResponse> {
+  const { data } = await apiClient.get<UsernameAvailabilityResponse>(
+    '/auth/register/check-username',
+    { params: { schoolId, username } },
+  );
   return data;
 }
 

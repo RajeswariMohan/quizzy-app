@@ -2,8 +2,6 @@ import { Link } from 'react-router-dom';
 import { ExternalLink, Mail, MessageCircleQuestion } from 'lucide-react';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { PUBLIC_SITE, supportMailtoHref } from '@/config/publicSite';
-import { useRedirectIfAuthenticated } from '@/hooks/useRedirectIfAuthenticated';
-
 const FAQ = [
   {
     q: 'How do I get access for my school?',
@@ -15,13 +13,11 @@ const FAQ = [
   },
   {
     q: 'Parents: how do I link to my child?',
-    a: 'During sign-up, enter your child’s student email address if they already have an account. You can also ask your school administrator to confirm the link.',
+    a: 'Your child enters your email as parent contact when they sign up. Create your parent account with that same email and select the same school — your child will appear on your dashboard automatically.',
   },
 ] as const;
 
 export function ContactPage() {
-  useRedirectIfAuthenticated();
-
   return (
     <PublicLayout>
       <div className="mx-auto max-w-3xl px-5 py-12 sm:px-8 sm:py-16">

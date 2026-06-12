@@ -1,10 +1,10 @@
 export type QuizStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
 
-export type QuizAudienceScope = 'SCHOOL' | 'GRADE_SECTION';
+export type QuizAudienceScope = 'SCHOOL' | 'GRADE' | 'GRADE_SECTION';
 
 export interface QuizAudienceTarget {
   grade: string;
-  section: string;
+  section?: string;
 }
 
 export interface PublishQuizPayload {

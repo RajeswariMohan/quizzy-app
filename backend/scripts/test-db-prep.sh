@@ -80,6 +80,37 @@ else
   echo "==> Quiz audience columns already present — skipping 011"
 fi
 
+if ! psql_exec -tAc "SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='parent_email';" | grep -q parent_email; then
+  echo "==> Applying user signup parent email migration..."
+  psql_exec < database/migrations/012_user_signup_parent_email.sql
+else
+  echo "==> User signup parent email columns already present — skipping 012"
+fi
+
+if ! psql_exec -tAc "SELECT column_name FROM information_schema.columns WHERE table_name='schools' AND column_name='grade_section_map';" | grep -q grade_section_map; then
+  echo "==> Applying grade sections and subscription migration..."
+  psql_exec < database/migrations/013_grade_sections_and_subscription.sql
+else
+  echo "==> Grade sections and subscription columns already present — skipping 013"
+fi
+
+if ! psql_exec -tAc "SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='username';" | grep -q username; then
+  echo "==> Applying user username migration..."
+  psql_exec < database/migrations/014_user_username.sql
+else
+  echo "==> User username column already present — skipping 014"
+fi
+
+if ! psql_exec -tAc "SELECT settings->'subscriptionPackages' FROM platform_settings WHERE id='00000000-0000-0000-0000-000000000001';" | grep -q BASIC; then
+  echo "==> Applying subscription package templates migration..."
+  psql_exec < database/migrations/015_subscription_package_templates.sql
+else
+  echo "==> Subscription package templates already present — skipping 015"
+fi
+
+echo "==> Resetting platform settings and school package defaults..."
+psql_exec < database/seeds/test-platform-settings.seed.sql
+
 echo "==> Seeding test users..."
 psql_exec < database/seeds/test-auth.seed.sql
 

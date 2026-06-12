@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { User, Save, KeyRound } from 'lucide-react';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { FieldSelect } from '@/components/ui/FieldSelect';
 import { PasswordInput } from '@/components/ui/PasswordInput';
+import { GradeSectionFields } from '@/components/school-admin/GradeSectionFields';
 import { changePassword, fetchProfile, updateProfile } from '@/api/profile.api';
 import { getApiErrorMessage, logApiError } from '@/api/client';
 import { useAuthStore } from '@/store/authStore';
@@ -21,7 +21,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 export function ProfilePage() {
   const refreshAuthProfile = useAuthStore((s) => s.refreshProfile);
-  const { grades: schoolGrades, sections: schoolSections } = useSchoolAcademics();
+  const { grades: schoolGrades, gradeSections: storeGradeSections } = useSchoolAcademics();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [firstName, setFirstName] = useState('');
@@ -67,6 +67,22 @@ export function ProfilePage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const profileAcademics = useMemo(() => {
+    if (
+      profile?.academicOptions?.gradeSections &&
+      Object.keys(profile.academicOptions.gradeSections).length > 0
+    ) {
+      return {
+        grades: profile.academicOptions.grades ?? schoolGrades,
+        gradeSections: profile.academicOptions.gradeSections,
+        sections: [],
+        subjects: [],
+        subscriptionTier: 'STANDARD' as const,
+      };
+    }
+    return null;
+  }, [profile, schoolGrades, storeGradeSections]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,10 +175,6 @@ export function ProfilePage() {
     profile.academicOptions?.grades.length
       ? profile.academicOptions.grades
       : schoolGrades;
-  const sectionOptions =
-    profile.academicOptions?.sections.length
-      ? profile.academicOptions.sections
-      : schoolSections;
 
   const initials = (displayName || firstName || 'U').charAt(0).toUpperCase();
 
@@ -267,22 +279,13 @@ export function ProfilePage() {
           </div>
 
           {profile.role === 'STUDENT' && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FieldSelect
-                label="Grade"
-                value={grade}
-                options={gradeOptions}
-                onChange={setGrade}
-                placeholder="Select grade"
-              />
-              <FieldSelect
-                label="Section"
-                value={section}
-                options={sectionOptions}
-                onChange={setSection}
-                placeholder="Select section"
-              />
-            </div>
+            <GradeSectionFields
+              grade={grade}
+              section={section}
+              onGradeChange={setGrade}
+              onSectionChange={setSection}
+              academics={profileAcademics}
+            />
           )}
 
           <Button type="submit" disabled={isSavingProfile}>

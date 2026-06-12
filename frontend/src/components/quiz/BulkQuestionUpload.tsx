@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { Download, FileUp, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { FileUploadCancelButton, SelectedFileRow } from '@/components/ui/FileUploadCancel';
 import { bulkImportQuestions } from '@/api/questions.api';
 import { getApiErrorMessage, logApiError } from '@/api/client';
 import {
@@ -28,6 +29,14 @@ export function BulkQuestionUpload({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
 
+  const resetUpload = () => {
+    setFileName(null);
+    setPreview([]);
+    setParseErrors([]);
+    setUploadError(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     setUploadError(null);
@@ -47,6 +56,8 @@ export function BulkQuestionUpload({
     event.target.value = '';
   };
 
+  const showPreviewActions = preview.length > 0;
+
   const handleImport = async () => {
     if (preview.length === 0) return;
     setIsImporting(true);
@@ -54,9 +65,7 @@ export function BulkQuestionUpload({
     try {
       const id = await ensureQuiz();
       const result = await bulkImportQuestions(id, preview);
-      setPreview([]);
-      setParseErrors([]);
-      setFileName(null);
+      resetUpload();
       onImported(result.importedCount, id);
     } catch (err) {
       logApiError('Bulk import failed', err);
@@ -104,21 +113,30 @@ export function BulkQuestionUpload({
         />
       </div>
 
-      {fileName && (
-        <p className="mt-2 text-xs text-muted">
-          Selected: <span className="font-medium text-ink">{fileName}</span>
-        </p>
-      )}
+      <SelectedFileRow
+        fileName={fileName}
+        onCancel={resetUpload}
+        disabled={disabled || isImporting}
+        showCancel={!showPreviewActions && parseErrors.length === 0}
+      />
 
       {parseErrors.length > 0 && (
-        <ul className="mt-3 space-y-1 rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">
-          {parseErrors.map((e, i) => (
-            <li key={`${e.row}-${i}`}>
-              {e.row > 0 ? `Row ${e.row}: ` : ''}
-              {e.message}
-            </li>
-          ))}
-        </ul>
+        <div className="mt-3 space-y-2">
+          <ul className="space-y-1 rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">
+            {parseErrors.map((e, i) => (
+              <li key={`${e.row}-${i}`}>
+                {e.row > 0 ? `Row ${e.row}: ` : ''}
+                {e.message}
+              </li>
+            ))}
+          </ul>
+          {!showPreviewActions && (
+            <FileUploadCancelButton
+              onCancel={resetUpload}
+              disabled={disabled || isImporting}
+            />
+          )}
+        </div>
       )}
 
       {preview.length > 0 && (
@@ -151,20 +169,34 @@ export function BulkQuestionUpload({
               <p className="px-2 py-1 text-muted">…and {preview.length - 8} more</p>
             )}
           </div>
-          <Button
-            type="button"
-            size="sm"
-            onClick={handleImport}
-            disabled={disabled || isImporting}
-          >
-            <Upload className="h-4 w-4" />
-            {isImporting ? 'Importing…' : `Import ${preview.length} questions`}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleImport}
+              disabled={disabled || isImporting || parseErrors.length > 0}
+            >
+              <Upload className="h-4 w-4" />
+              {isImporting ? 'Importing…' : `Import ${preview.length} questions`}
+            </Button>
+            <FileUploadCancelButton
+              onCancel={resetUpload}
+              disabled={disabled || isImporting}
+            />
+          </div>
         </div>
       )}
 
       {uploadError && (
-        <p className="mt-2 text-xs text-danger">{uploadError}</p>
+        <div className="mt-2 space-y-2">
+          <p className="text-xs text-danger">{uploadError}</p>
+          {!showPreviewActions && (
+            <FileUploadCancelButton
+              onCancel={resetUpload}
+              disabled={disabled || isImporting}
+            />
+          )}
+        </div>
       )}
     </div>
   );

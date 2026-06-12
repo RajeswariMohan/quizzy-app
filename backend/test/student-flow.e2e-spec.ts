@@ -21,14 +21,35 @@ describe('Student flow (e2e)', () => {
     await app.close();
   });
 
-  it('GET /api/student/quizzes lists published quizzes', () => {
+  it('GET /api/student/quizzes lists published quizzes without query params', () => {
     return request(app.getHttpServer())
       .get('/api/student/quizzes')
       .set('Authorization', `Bearer ${studentToken}`)
       .expect(200)
       .expect((res) => {
-        expect(Array.isArray(res.body)).toBe(true);
-        expect(res.body.length).toBeGreaterThan(0);
+        expect(Array.isArray(res.body.items)).toBe(true);
+        expect(res.body.items.length).toBeGreaterThan(0);
+        expect(res.body.filter).toBeNull();
+      });
+  });
+
+  it('GET /api/student/quizzes rejects grade filter for another class', () => {
+    return request(app.getHttpServer())
+      .get('/api/student/quizzes')
+      .query({ grade: 'Class 1' })
+      .set('Authorization', `Bearer ${studentToken}`)
+      .expect(403);
+  });
+
+  it('GET /api/student/audience-options returns published grade groups', () => {
+    return request(app.getHttpServer())
+      .get('/api/student/audience-options')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .expect(200)
+      .expect((res) => {
+        expect(res.body).toHaveProperty('grades');
+        expect(res.body).toHaveProperty('sectionsByGrade');
+        expect(res.body).toHaveProperty('viewer');
       });
   });
 
@@ -49,22 +70,33 @@ describe('Student flow (e2e)', () => {
       .set('Authorization', `Bearer ${studentToken}`)
       .expect(200);
 
-    const quizId = quizzes.body[0].id;
+    const quizId = quizzes.body.items[0].id;
 
     const quiz = await request(app.getHttpServer())
       .get(`/api/student/quizzes/${quizId}`)
       .set('Authorization', `Bearer ${studentToken}`)
       .expect(200);
 
-    const questionId = quiz.body.questions[0].id;
+    const unanswered = quiz.body.questions.find(
+      (q: { selectedOptionIndex: number | null }) => q.selectedOptionIndex == null,
+    );
+    const questionId = unanswered?.id ?? quiz.body.questions[0].id;
+
+    if (unanswered) {
+      await request(app.getHttpServer())
+        .post(`/api/student/quizzes/${quizId}/responses`)
+        .set('Authorization', `Bearer ${studentToken}`)
+        .send({ questionId, selectedOptionIndex: 1 })
+        .expect((res) => {
+          expect([200, 201]).toContain(res.status);
+        });
+    }
 
     await request(app.getHttpServer())
       .post(`/api/student/quizzes/${quizId}/responses`)
       .set('Authorization', `Bearer ${studentToken}`)
-      .send({ questionId, selectedOptionIndex: 1 })
-      .expect((res) => {
-        expect([200, 201]).toContain(res.status);
-      });
+      .send({ questionId, selectedOptionIndex: 0 })
+      .expect(409);
   });
 
   it('GET /api/quizzes/dashboard/overview allows teacher', () => {

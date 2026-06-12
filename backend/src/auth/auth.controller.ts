@@ -3,6 +3,7 @@ import {
   Body,
   ConflictException,
   Controller,
+  ForbiddenException,
   Get,
   NotFoundException,
   Post,
@@ -13,7 +14,7 @@ import {
 import { Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { IsNull, Not, Repository } from 'typeorm';
 import { School } from '@database/entities/school.entity';
 import { User } from '@database/entities/user.entity';
 import { UserRole } from '@database/enums/user-role.enum';
@@ -21,6 +22,14 @@ import { ParentStudentLinkService } from '../parent/parent-student-link.service'
 import { SchoolLimitsService } from '../school/school-limits.service';
 import { Public } from './decorators/public.decorator';
 import { DEV_SEED_USER_IDS, resolveDevSeedRole } from './constants/dev-seed-users';
+import {
+  assertValidUsername,
+  buildStudentLoginEmail,
+} from './constants/username.util';
+import {
+  UNLISTED_SCHOOL_ID,
+  UNLISTED_SCHOOL_SLUG,
+} from './constants/unlisted-school';
 import { DevIssueTokenDto } from './dto/dev-issue-token.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -29,6 +38,7 @@ import { PasswordService } from './services/password.service';
 import { SessionService } from './services/session.service';
 import { TokenService } from './services/token.service';
 import { SchoolAcademicsService } from '../school-admin/school-academics.service';
+import { SchoolFeatureService } from '../school/school-feature.service';
 
 @Controller('auth')
 export class AuthController {
@@ -43,6 +53,7 @@ export class AuthController {
     private readonly schoolsRepository: Repository<School>,
     private readonly parentStudentLinkService: ParentStudentLinkService,
     private readonly schoolLimitsService: SchoolLimitsService,
+    private readonly schoolFeatureService: SchoolFeatureService,
     private readonly sessionService: SessionService,
     private readonly tokenService: TokenService,
   ) {}
@@ -50,24 +61,82 @@ export class AuthController {
   @Public()
   @Post('login')
   async login(@Body() dto: LoginDto, @Req() req: Request): Promise<AuthTokensResponse> {
-    const email = dto.email.trim().toLowerCase();
-    const user = await this.usersRepository
+    const identifier = dto.identifier.trim().toLowerCase();
+    const qb = this.usersRepository
       .createQueryBuilder('u')
       .addSelect('u.passwordHash')
-      .where('LOWER(u.email) = :email', { email })
-      .andWhere('u.is_active = true')
-      .getOne();
+      .where('u.is_active = true');
 
-    if (!user) {
-      throw new UnauthorizedException('Invalid email or password');
+    if (identifier.includes('@')) {
+      qb.andWhere('LOWER(u.email) = :identifier', { identifier });
+    } else {
+      qb.andWhere('LOWER(u.username) = :identifier', { identifier });
     }
 
+    const matches = await qb.getMany();
+    if (matches.length === 0) {
+      throw new UnauthorizedException('Invalid username/email or password');
+    }
+    if (matches.length > 1) {
+      throw new UnauthorizedException(
+        'Multiple accounts match this username. Sign in with your email address instead.',
+      );
+    }
+
+    const user = matches[0];
     const valid = await this.passwordService.verify(dto.password, user.passwordHash);
     if (!valid) {
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException('Invalid username/email or password');
     }
 
     return this.authService.issueTokensForUser(user.id, this.sessionMetaFromRequest(req));
+  }
+
+  /** Check student username availability within a school (public signup). */
+  @Public()
+  @Get('register/check-username')
+  async checkUsername(
+    @Query('schoolId') schoolId: string,
+    @Query('username') username: string,
+  ) {
+    const targetSchoolId = schoolId?.trim();
+    if (!targetSchoolId) {
+      throw new BadRequestException('schoolId is required');
+    }
+    try {
+      const normalized = assertValidUsername(username ?? '');
+      const taken = await this.usersRepository
+        .createQueryBuilder('u')
+        .where('u.school_id = :schoolId', { schoolId: targetSchoolId })
+        .andWhere('LOWER(u.username) = :username', { username: normalized })
+        .getOne();
+      return { available: !taken, username: normalized };
+    } catch (err) {
+      if (err instanceof BadRequestException) {
+        return { available: false, reason: err.message };
+      }
+      throw err;
+    }
+  }
+
+  /** Active onboarded schools for self-service signup (excludes unlisted tenant). */
+  @Public()
+  @Get('register-schools')
+  async registerSchools() {
+    const schools = await this.schoolsRepository.find({
+      where: { isActive: true, slug: Not(UNLISTED_SCHOOL_SLUG) },
+      select: ['id', 'name', 'board'],
+      order: { name: 'ASC' },
+    });
+
+    return {
+      schools: schools.map((school) => ({
+        id: school.id,
+        name: school.name,
+        board: school.board,
+      })),
+      otherSchoolId: this.resolveUnlistedSchoolId(),
+    };
   }
 
   /** Academic options for self-service signup (default or requested school). */
@@ -81,26 +150,70 @@ export class AuthController {
     if (!target) {
       throw new BadRequestException('schoolId is required');
     }
-    return this.schoolAcademicsService.getForSchoolId(target);
+    const academics = await this.schoolAcademicsService.getForSchoolId(target);
+    const features = await this.schoolFeatureService.getEffectiveFeatures(target);
+    return {
+      ...academics,
+      parentPortalEnabled: features.parentPortalEnabled,
+    };
   }
 
   @Public()
   @Post('register')
   async register(@Body() dto: RegisterDto, @Req() req: Request): Promise<AuthTokensResponse> {
-    const email = dto.email.trim().toLowerCase();
-    const schoolId = await this.resolveSchoolId(dto.schoolId, dto.role);
+    this.validateRegisterFields(dto);
 
-    if (schoolId && dto.role === UserRole.STUDENT) {
-      const school = await this.schoolsRepository.findOne({
-        where: { id: schoolId, isActive: true },
+    const schoolId = await this.resolveSchoolId(dto.schoolId, dto.role);
+    const school =
+      schoolId !== null
+        ? await this.schoolsRepository.findOne({
+            where: { id: schoolId, isActive: true },
+          })
+        : null;
+
+    let email: string;
+    let username: string | null = null;
+
+    if (dto.role === UserRole.STUDENT) {
+      if (!school) {
+        throw new BadRequestException('Invalid or inactive school');
+      }
+      username = assertValidUsername(dto.username!);
+      email = buildStudentLoginEmail(username, school.slug);
+      const usernameTaken = await this.usersRepository.findOne({
+        where: { schoolId: school.id, username },
       });
-      if (school) {
-        if (dto.grade?.trim()) {
-          this.schoolAcademicsService.assertGradeAllowed(school, dto.grade);
-        }
-        if (dto.subject?.trim()) {
-          this.schoolAcademicsService.assertSubjectAllowed(school, dto.subject);
-        }
+      if (usernameTaken) {
+        throw new ConflictException('This username is already taken at your school');
+      }
+    } else {
+      email = dto.email!.trim().toLowerCase();
+    }
+
+    if (dto.role === UserRole.PARENT && schoolId) {
+      const features = await this.schoolFeatureService.getEffectiveFeatures(schoolId);
+      if (!features.parentPortalEnabled) {
+        throw new ForbiddenException(
+          'Parent signup is not available for this school. Contact your school administrator.',
+        );
+      }
+      await this.parentStudentLinkService.assertStudentsForParentEmail(schoolId, email);
+    }
+
+    const unlistedSchoolId = this.resolveUnlistedSchoolId();
+    const isUnlistedStudent =
+      dto.role === UserRole.STUDENT && schoolId === unlistedSchoolId;
+
+    if (school && dto.role === UserRole.STUDENT) {
+      if (dto.grade?.trim()) {
+        this.schoolAcademicsService.assertGradeAllowed(school, dto.grade);
+      }
+      if (dto.section?.trim() && dto.grade?.trim()) {
+        this.schoolAcademicsService.assertSectionAllowed(
+          school,
+          dto.section,
+          dto.grade,
+        );
       }
     }
 
@@ -115,14 +228,22 @@ export class AuthController {
     }
 
     const passwordHash = await this.passwordService.hash(dto.password);
+    const parentEmail =
+      dto.role === UserRole.STUDENT ? dto.parentEmail!.trim().toLowerCase() : null;
+
     const user = this.usersRepository.create({
       email,
+      username,
       passwordHash,
       firstName: dto.firstName.trim(),
       lastName: dto.lastName.trim(),
       displayName: `${dto.firstName.trim()} ${dto.lastName.trim()}`.trim(),
       role: dto.role,
       schoolId,
+      grade: dto.role === UserRole.STUDENT ? dto.grade?.trim() || null : null,
+      section: dto.role === UserRole.STUDENT ? dto.section?.trim() || null : null,
+      parentEmail,
+      signupSchoolNote: isUnlistedStudent ? dto.signupSchoolNote!.trim() : null,
       isActive: true,
       xpPoints: 0,
       currentStreak: 0,
@@ -130,15 +251,11 @@ export class AuthController {
 
     const saved = await this.usersRepository.save(user);
 
-    if (
-      saved.role === UserRole.PARENT &&
-      dto.studentEmail?.trim() &&
-      saved.schoolId
-    ) {
-      await this.parentStudentLinkService.linkByStudentEmail(
+    if (saved.role === UserRole.PARENT && saved.schoolId) {
+      await this.parentStudentLinkService.linkByParentEmail(
         saved.id,
         saved.schoolId,
-        dto.studentEmail,
+        saved.email,
       );
     }
 
@@ -206,6 +323,52 @@ export class AuthController {
     }
   }
 
+  private resolveUnlistedSchoolId(): string {
+    return (
+      this.configService.get<string>('UNLISTED_SCHOOL_ID')?.trim() || UNLISTED_SCHOOL_ID
+    );
+  }
+
+  private validateRegisterFields(dto: RegisterDto): void {
+    if (dto.role === UserRole.STUDENT) {
+      if (!dto.schoolId?.trim()) {
+        throw new BadRequestException('School is required');
+      }
+      if (!dto.username?.trim()) {
+        throw new BadRequestException('Username is required');
+      }
+      assertValidUsername(dto.username);
+      if (!dto.parentEmail?.trim()) {
+        throw new BadRequestException('Parent email is required');
+      }
+      if (!dto.grade?.trim()) {
+        throw new BadRequestException('Grade is required');
+      }
+      if (!dto.section?.trim()) {
+        throw new BadRequestException('Section is required');
+      }
+      const unlistedId = this.resolveUnlistedSchoolId();
+      if (dto.schoolId.trim() === unlistedId) {
+        const note = dto.signupSchoolNote?.trim();
+        if (!note) {
+          throw new BadRequestException(
+            'School name and address are required when your school is not listed',
+          );
+        }
+      }
+    }
+
+    if (dto.role === UserRole.PARENT && !dto.schoolId?.trim()) {
+      throw new BadRequestException('School is required');
+    }
+
+    if (dto.role === UserRole.PARENT || dto.role === UserRole.TEACHER) {
+      if (!dto.email?.trim()) {
+        throw new BadRequestException('Email is required');
+      }
+    }
+  }
+
   private async resolveSchoolId(
     schoolId: string | undefined,
     role: UserRole,
@@ -214,8 +377,14 @@ export class AuthController {
       return null;
     }
 
+    const explicit = schoolId?.trim();
+
+    if ((role === UserRole.STUDENT || role === UserRole.PARENT) && !explicit) {
+      throw new BadRequestException('schoolId is required for this account type');
+    }
+
     const target =
-      schoolId?.trim() ||
+      explicit ||
       this.configService.get<string>('DEFAULT_SCHOOL_ID')?.trim() ||
       null;
 

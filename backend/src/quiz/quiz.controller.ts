@@ -7,6 +7,7 @@ import { CreateQuizDto } from './dto/create-quiz.dto';
 import { UpdateQuizDto } from './dto/update-quiz.dto';
 import { DashboardAnalyticsQueryDto } from './dto/dashboard-analytics-query.dto';
 import { PublishQuizDto } from './dto/publish-quiz.dto';
+import { QuizAcademicSuggestionsQueryDto } from './dto/quiz-academic-suggestions-query.dto';
 import { QuizService } from './quiz.service';
 import { mapQuizCreator } from './quiz-creator.util';
 
@@ -31,6 +32,15 @@ export class QuizController {
     @Query() query: DashboardAnalyticsQueryDto,
   ) {
     return this.quizService.getTeacherDashboard(tenant, query);
+  }
+
+  @Get('academic-suggestions')
+  @RequirePermissions(Permission.MANAGE_QUIZZES)
+  academicSuggestions(
+    @CurrentTenant() tenant: TenantContext,
+    @Query() query: QuizAcademicSuggestionsQueryDto,
+  ) {
+    return this.quizService.listTopicSuggestionsForSchool(tenant, query);
   }
 
   @Post()

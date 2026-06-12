@@ -1,0 +1,2 @@
+export const UNLISTED_SCHOOL_SLUG = 'unlisted';
+export const UNLISTED_SCHOOL_ID = '77777777-7777-7777-7777-777777777777';

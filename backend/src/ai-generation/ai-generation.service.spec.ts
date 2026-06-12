@@ -7,8 +7,9 @@ import { Question } from '@database/entities/question.entity';
 import { Quiz } from '@database/entities/quiz.entity';
 import { AiGenerationStatus } from '@database/enums/ai-generation-status.enum';
 import { buildTeacherTenant } from '../../test/helpers/tenant-fixtures';
-import { SCHOOL_ID, TEST_QUIZ_ID } from '../../test/helpers/constants';
+import { SCHOOL_ID, TEACHER_ID, TEST_QUIZ_ID } from '../../test/helpers/constants';
 import { TenantContextService } from '../auth/services/tenant-context.service';
+import { SchoolFeatureService } from '../school/school-feature.service';
 import { MockLlmService } from '../llm/mock-llm.service';
 import { AI_QUESTION_GENERATION_QUEUE } from '../queue/queue.constants';
 import { AiGenerationService } from './ai-generation.service';
@@ -27,7 +28,11 @@ describe('AiGenerationService', () => {
       .mockImplementation((task) => Promise.resolve(task));
     taskFindOne = jest.fn();
     queueAdd = jest.fn().mockResolvedValue({ id: 'bull-job-1' });
-    quizFindOne = jest.fn().mockResolvedValue({ id: TEST_QUIZ_ID, schoolId: SCHOOL_ID });
+    quizFindOne = jest.fn().mockResolvedValue({
+      id: TEST_QUIZ_ID,
+      schoolId: SCHOOL_ID,
+      createdByUserId: TEACHER_ID,
+    });
 
     const module = await Test.createTestingModule({
       providers: [
@@ -60,6 +65,10 @@ describe('AiGenerationService', () => {
         {
           provide: TenantContextService,
           useValue: { resolveSchoolIdForQuery: jest.fn(() => SCHOOL_ID) },
+        },
+        {
+          provide: SchoolFeatureService,
+          useValue: { assertFeature: jest.fn().mockResolvedValue(undefined) },
         },
         MockLlmService,
       ],

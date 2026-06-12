@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Building2, RefreshCw, TrendingUp, Users } from 'lucide-react';
+import { Building2, RefreshCw, TrendingUp, Users, X } from 'lucide-react';
+import { FilterPanel } from '@/components/layout/FilterPanel';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { TableSearchInput } from '@/components/ui/TableSearchInput';
 import { fetchPlatformOverview } from '@/api/admin.api';
 import { getApiErrorMessage, logApiError } from '@/api/client';
 import { useSchoolFilterStore } from '@/store/schoolFilterStore';
 import { useClientPagination } from '@/hooks/useClientPagination';
 import { TablePagination } from '@/components/ui/TablePagination';
+import { matchesTableSearch } from '@/utils/tableFilters';
 
 export function AdminOverviewPage() {
   const filterVersion = useSchoolFilterStore((s) => s.filterVersion);
@@ -17,10 +20,18 @@ export function AdminOverviewPage() {
   );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
   const overviewSchools = data?.schools ?? [];
-  const schoolsPagination = useClientPagination(overviewSchools, {
-    resetKey: `${filterVersion}|${overviewSchools.length}`,
+  const filteredSchools = useMemo(
+    () =>
+      overviewSchools.filter((s) =>
+        matchesTableSearch(search, [s.name, s.slug, String(s.students), String(s.teachers)]),
+      ),
+    [overviewSchools, search],
+  );
+  const schoolsPagination = useClientPagination(filteredSchools, {
+    resetKey: `${filterVersion}|${search}|${filteredSchools.length}`,
   });
 
   const load = useCallback(() => {
@@ -99,6 +110,32 @@ export function AdminOverviewPage() {
           </Card>
         ))}
       </div>
+
+      <FilterPanel>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-ink">Filter schools</p>
+            <p className="text-xs text-muted">
+              Showing {filteredSchools.length} of {overviewSchools.length}
+              {search.trim() ? ' · search active' : ''}
+            </p>
+          </div>
+          {search.trim() && (
+            <Button type="button" variant="outline" size="sm" onClick={() => setSearch('')}>
+              <X className="h-4 w-4" />
+              Clear
+            </Button>
+          )}
+        </div>
+        <div className="mt-3">
+          <TableSearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="School name or slug…"
+            label="Search schools"
+          />
+        </div>
+      </FilterPanel>
 
       <Card className="overflow-hidden !p-0">
         <div className="border-b border-gray-100 px-4 py-3">

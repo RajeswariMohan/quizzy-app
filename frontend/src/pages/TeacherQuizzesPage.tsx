@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  BookOpen,
   ChevronDown,
   ChevronUp,
   Pencil,
@@ -21,21 +20,22 @@ import { QuestionListItem } from '@/components/quiz/QuestionListItem';
 import { getApiErrorMessage, logApiError } from '@/api/client';
 import { useNotificationStore } from '@/store/notificationStore';
 import { useAuthStore } from '@/store/authStore';
-import { useSchoolFilterStore } from '@/store/schoolFilterStore';
+import { useSchoolAcademics } from '@/hooks/useSchoolAcademics';
 import { PageWithScrollBelowFilter } from '@/components/layout/PageWithScrollBelowFilter';
 import { QuizListFilterBar } from '@/components/quiz/QuizListFilterBar';
+import { TablePagination } from '@/components/ui/TablePagination';
+import { useClientPagination } from '@/hooks/useClientPagination';
 import { formatAudienceLabel } from '@/utils/quizAudience';
 import { formatQuizSubtitle } from '@/utils/quizMeta';
 import {
   applyQuizListFilters,
+  buildQuizAcademicLinks,
   buildQuizFilterOptions,
   DEFAULT_QUIZ_LIST_FILTERS,
-  filterQuizzesByStatus,
   type QuizListFilters,
 } from '@/utils/quizFilters';
 import type { PublishQuizPayload, QuestionItem, QuizStatus, QuizSummary } from '@/types/quiz';
-
-type StatusFilter = 'ALL' | QuizStatus;
+import { hasQuizTopic, QUIZ_TOPIC_PUBLISH_MESSAGE } from '@/utils/quizTopic';
 
 function statusBadgeClass(status: QuizStatus): string {
   if (status === 'PUBLISHED') return 'bg-success/15 text-success';
@@ -45,17 +45,19 @@ function statusBadgeClass(status: QuizStatus): string {
 
 export function TeacherQuizzesPage() {
   const addNotification = useNotificationStore((s) => s.addNotification);
-  const filterVersion = useSchoolFilterStore((s) => s.filterVersion);
-  const filterLabel = useSchoolFilterStore((s) => s.getFilterLabel());
-  const isSuperAdmin = useAuthStore((s) => s.user?.role === 'SUPER_ADMIN');
+  const userRole = useAuthStore((s) => s.user?.role);
+  const isSuperAdmin = userRole === 'SUPER_ADMIN';
+  const isSchoolAdmin = userRole === 'SCHOOL_ADMIN';
   const [quizzes, setQuizzes] = useState<QuizSummary[]>([]);
-  const [filter, setFilter] = useState<StatusFilter>('ALL');
+  const { gradeSections } = useSchoolAcademics();
   const [listFilters, setListFilters] = useState<QuizListFilters>(DEFAULT_QUIZ_LIST_FILTERS);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hasLoadedOnce = useRef(false);
   const [publishDialogQuiz, setPublishDialogQuiz] = useState<QuizSummary | null>(null);
   const [unpublishingId, setUnpublishingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -63,54 +65,71 @@ export function TeacherQuizzesPage() {
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
 
   const loadQuizzes = useCallback(() => {
-    setIsLoading(true);
+    const background = hasLoadedOnce.current;
+    if (background) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
     setError(null);
-    listQuizzes()
+    listQuizzes({
+      dateFrom: listFilters.dateFrom,
+      dateTo: listFilters.dateTo,
+    })
       .then(setQuizzes)
       .catch((err) => {
         logApiError('Load quizzes failed', err);
         setError(getApiErrorMessage(err, 'Could not load quizzes.'));
       })
-      .finally(() => setIsLoading(false));
-  }, []);
+      .finally(() => {
+        setIsLoading(false);
+        setIsRefreshing(false);
+        hasLoadedOnce.current = true;
+      });
+  }, [listFilters.dateFrom, listFilters.dateTo]);
 
   useEffect(() => {
     loadQuizzes();
-  }, [loadQuizzes, filterVersion]);
+  }, [loadQuizzes]);
 
   const filterOptions = useMemo(() => buildQuizFilterOptions(quizzes), [quizzes]);
-
-  const byStatus = useMemo(
-    () => filterQuizzesByStatus(quizzes, filter),
-    [quizzes, filter],
-  );
+  const academicLinks = useMemo(() => buildQuizAcademicLinks(quizzes), [quizzes]);
 
   const filtered = useMemo(
-    () => applyQuizListFilters(byStatus, listFilters),
-    [byStatus, listFilters],
+    () => applyQuizListFilters(quizzes, listFilters, gradeSections),
+    [quizzes, listFilters, gradeSections],
   );
 
-  const counts = useMemo(
-    () => ({
-      all: quizzes.length,
-      draft: quizzes.filter((q) => q.status === 'DRAFT').length,
-      published: quizzes.filter((q) => q.status === 'PUBLISHED').length,
-      archived: quizzes.filter((q) => q.status === 'ARCHIVED').length,
-    }),
-    [quizzes],
+  const paginationResetKey = useMemo(
+    () =>
+      JSON.stringify({
+        dateFrom: listFilters.dateFrom,
+        dateTo: listFilters.dateTo,
+        status: listFilters.status,
+        grade: listFilters.grade,
+        academicGroup: listFilters.academicGroup,
+        subject: listFilters.subject,
+        topic: listFilters.topic,
+        sort: listFilters.sort,
+        search: listFilters.search,
+        count: filtered.length,
+      }),
+    [listFilters, filtered.length],
   );
 
-  const statusTabs = useMemo(() => {
-    const tabs: [StatusFilter, string][] = [
-      ['ALL', `All (${counts.all})`],
-      ['DRAFT', `Draft (${counts.draft})`],
-      ['PUBLISHED', `Published (${counts.published})`],
-    ];
-    if (counts.archived > 0) {
-      tabs.push(['ARCHIVED', `Archived (${counts.archived})`]);
+  const quizPagination = useClientPagination(filtered, {
+    resetKey: paginationResetKey,
+    initialPageSize: 10,
+  });
+
+  useEffect(() => {
+    if (!expandedId) return;
+    if (!quizPagination.pageItems.some((q) => q.id === expandedId)) {
+      setExpandedId(null);
+      setQuestions([]);
+      setEditingQuestionId(null);
     }
-    return tabs;
-  }, [counts]);
+  }, [expandedId, quizPagination.pageItems]);
 
   const handleUnpublish = async (quizId: string) => {
     setUnpublishingId(quizId);
@@ -202,8 +221,10 @@ export function TeacherQuizzesPage() {
               <h1 className="text-2xl font-bold text-ink">Quizzes</h1>
               <p className="text-muted">
                 {isSuperAdmin
-                  ? `Manage quizzes · ${filterLabel}`
-                  : 'Create, edit, unpublish, and republish quizzes with manual and AI questions'}
+                  ? 'Only quizzes you created — use the filters to narrow results'
+                  : isSchoolAdmin
+                    ? 'All quizzes at your school — any teacher or admin who created them'
+                    : 'Only quizzes you created — use the filters to narrow results'}
               </p>
             </div>
             <Button variant="outline" size="sm" onClick={loadQuizzes} disabled={isLoading}>
@@ -213,39 +234,14 @@ export function TeacherQuizzesPage() {
           </div>
         }
         filter={
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <BookOpen className="h-5 w-5" />
-                Your quizzes
-              </CardTitle>
-              <div className="flex flex-wrap gap-2">
-                {statusTabs.map(([key, label]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setFilter(key)}
-                    className={`rounded-xl px-3 py-1.5 text-sm font-medium transition ${
-                      filter === key
-                        ? 'bg-primary text-white'
-                        : 'bg-white text-muted hover:text-ink ring-1 ring-gray-200'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {!isLoading && !error && quizzes.length > 0 && (
-              <QuizListFilterBar
-                filters={listFilters}
-                options={filterOptions}
-                resultCount={filtered.length}
-                totalCount={byStatus.length}
-                onChange={setListFilters}
-              />
-            )}
-          </div>
+          <QuizListFilterBar
+            filters={listFilters}
+            options={filterOptions}
+            academicLinks={academicLinks}
+            resultCount={filtered.length}
+            totalCount={quizzes.length}
+            onChange={setListFilters}
+          />
         }
       >
         <Card className="border-primary/20 bg-primary/5">
@@ -258,6 +254,7 @@ export function TeacherQuizzesPage() {
         </p>
         <div className="mt-4">
           <QuizCreatorForm
+            academicLinks={academicLinks}
             onPublished={loadQuizzes}
             onQuestionAdded={async (quizId) => {
               loadQuizzes();
@@ -288,16 +285,21 @@ export function TeacherQuizzesPage() {
         {!isLoading && !error && filtered.length === 0 && (
           <p className="mt-6 text-center text-sm text-muted">
             {quizzes.length === 0
-              ? 'No quizzes yet. Create one above to get started.'
-              : byStatus.length === 0
-                ? 'No quizzes in this status tab.'
-                : 'No quizzes match your filters. Try clearing filters or changing the search.'}
+              ? 'No quizzes in this date range. Widen the dates or create one above.'
+              : 'No quizzes match your filters. Try clearing filters or changing the date range.'}
           </p>
         )}
 
         {!isLoading && filtered.length > 0 && (
-          <div className="mt-4 space-y-3">
-            {filtered.map((quiz) => (
+          <div
+            className={`relative mt-4 space-y-3 transition-opacity ${isRefreshing ? 'pointer-events-none opacity-50' : ''}`}
+          >
+            {isRefreshing && (
+              <div className="absolute inset-x-0 top-0 z-10 flex justify-center py-8">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent bg-white/80" />
+              </div>
+            )}
+            {quizPagination.pageItems.map((quiz) => (
               <div
                 key={quiz.id}
                 className="rounded-xl border border-gray-100 bg-white overflow-hidden"
@@ -359,7 +361,18 @@ export function TeacherQuizzesPage() {
                         <Button
                           size="sm"
                           disabled={(quiz.questionCount ?? 0) === 0}
-                          onClick={() => setPublishDialogQuiz(quiz)}
+                          onClick={() => {
+                            if (!hasQuizTopic(quiz.topic)) {
+                              addNotification({
+                                title: 'Topic required',
+                                body: QUIZ_TOPIC_PUBLISH_MESSAGE,
+                                type: 'error',
+                              });
+                              setEditingId(quiz.id);
+                              return;
+                            }
+                            setPublishDialogQuiz(quiz);
+                          }}
                         >
                           <Send className="h-4 w-4" />
                           Publish
@@ -383,6 +396,7 @@ export function TeacherQuizzesPage() {
                 {editingId === quiz.id && (
                   <QuizEditForm
                     quiz={quiz}
+                    academicLinks={academicLinks}
                     onSaved={() => {
                       setEditingId(null);
                       loadQuizzes();
@@ -401,6 +415,7 @@ export function TeacherQuizzesPage() {
                     <QuizCreatorForm
                       compact
                       existingQuizId={quiz.id}
+                      academicLinks={academicLinks}
                       onCancel={() => setAddingQuestionsId(null)}
                       onQuestionAdded={async (quizId) => {
                         loadQuizzes();
@@ -465,6 +480,20 @@ export function TeacherQuizzesPage() {
               </div>
             ))}
           </div>
+        )}
+
+        {quizPagination.showPagination && !isLoading && filtered.length > 0 && (
+          <TablePagination
+            page={quizPagination.page}
+            totalPages={quizPagination.totalPages}
+            pageSize={quizPagination.pageSize}
+            totalItems={quizPagination.totalItems}
+            rangeStart={quizPagination.rangeStart}
+            rangeEnd={quizPagination.rangeEnd}
+            onPageChange={quizPagination.setPage}
+            onPageSizeChange={quizPagination.setPageSize}
+            className="mt-4 rounded-xl border border-gray-100"
+          />
         )}
         </Card>
       </PageWithScrollBelowFilter>

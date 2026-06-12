@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
-import { MessageSquare, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { MessageSquare, RefreshCw, X } from 'lucide-react';
 import { FilterPanel } from '@/components/layout/FilterPanel';
 import { PageWithScrollBelowFilter } from '@/components/layout/PageWithScrollBelowFilter';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { FieldSelect } from '@/components/ui/FieldSelect';
+import { TableSearchInput } from '@/components/ui/TableSearchInput';
 import {
   fetchAdminFeedback,
   updateAdminFeedback,
@@ -13,6 +14,7 @@ import {
 } from '@/api/feedback.api';
 import { getApiErrorMessage, logApiError } from '@/api/client';
 import { formatDateTime } from '@/lib/formatDateTime';
+import { matchesTableSearch } from '@/utils/tableFilters';
 import type { UserRole } from '@/types/auth';
 
 const STATUS_OPTIONS = ['All', 'OPEN', 'IN_PROGRESS', 'RESOLVED'] as const;
@@ -29,6 +31,7 @@ export function AdminFeedbackPage() {
   const [openCount, setOpenCount] = useState(0);
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [roleFilter, setRoleFilter] = useState<string>('All');
+  const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [adminNotes, setAdminNotes] = useState('');
   const [updateStatus, setUpdateStatus] = useState<FeedbackStatus>('OPEN');
@@ -61,7 +64,23 @@ export function AdminFeedbackPage() {
     load();
   }, [load]);
 
-  const selected = items.find((i) => i.id === selectedId) ?? null;
+  const filteredItems = useMemo(
+    () =>
+      items.filter((item) =>
+        matchesTableSearch(search, [
+          item.userDisplayName,
+          item.userEmail,
+          item.schoolName,
+          item.message,
+          item.category,
+          item.status,
+          ROLE_LABELS[item.role] ?? item.role,
+        ]),
+      ),
+    [items, search],
+  );
+
+  const selected = filteredItems.find((i) => i.id === selectedId) ?? items.find((i) => i.id === selectedId) ?? null;
 
   useEffect(() => {
     if (selected) {
@@ -105,7 +124,27 @@ export function AdminFeedbackPage() {
       }
       filter={
         <FilterPanel>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <p className="text-xs text-muted">
+              {filteredItems.length} of {items.length} shown
+              {search.trim() ? ' · search active' : ''}
+            </p>
+            {search.trim() && (
+              <Button type="button" variant="outline" size="sm" onClick={() => setSearch('')}>
+                <X className="h-4 w-4" />
+                Clear search
+              </Button>
+            )}
+          </div>
+          <div className="mt-3">
+            <TableSearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Message, user, school…"
+              label="Search feedback"
+            />
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <FieldSelect
               label="Status"
               value={statusFilter}
@@ -129,7 +168,7 @@ export function AdminFeedbackPage() {
         </Card>
         <Card className="!p-4">
           <p className="text-sm text-muted">Total shown</p>
-          <p className="text-2xl font-bold">{items.length}</p>
+          <p className="text-2xl font-bold">{filteredItems.length}</p>
         </Card>
       </div>
 
@@ -149,11 +188,11 @@ export function AdminFeedbackPage() {
           </div>
           {isLoading ? (
             <p className="p-4 text-sm text-muted">Loading…</p>
-          ) : items.length === 0 ? (
+          ) : filteredItems.length === 0 ? (
             <p className="p-4 text-sm text-muted">No feedback matches your filters.</p>
           ) : (
             <ul className="max-h-[520px] divide-y divide-gray-100 overflow-y-auto">
-              {items.map((item) => (
+              {filteredItems.map((item) => (
                 <li key={item.id}>
                   <button
                     type="button"

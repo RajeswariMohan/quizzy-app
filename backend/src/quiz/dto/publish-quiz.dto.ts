@@ -16,16 +16,21 @@ export class QuizAudienceTargetDto {
   @MaxLength(50)
   grade!: string;
 
+  @IsOptional()
   @IsString()
   @MaxLength(20)
-  section!: string;
+  section?: string;
 }
 
 export class PublishQuizDto {
   @IsEnum(QuizAudienceScope)
   audienceScope!: QuizAudienceScope;
 
-  @ValidateIf((o: PublishQuizDto) => o.audienceScope === QuizAudienceScope.GRADE_SECTION)
+  @ValidateIf(
+    (o: PublishQuizDto) =>
+      o.audienceScope === QuizAudienceScope.GRADE_SECTION ||
+      o.audienceScope === QuizAudienceScope.GRADE,
+  )
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })

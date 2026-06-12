@@ -14,6 +14,7 @@ import {
   AdminOverviewQueryDto,
   AdminSchoolsStatusFilter,
 } from './dto/admin-overview-query.dto';
+import { UpdateSubscriptionPackagesDto } from './dto/update-subscription-packages.dto';
 
 @Controller()
 export class AdminController {
@@ -59,6 +60,23 @@ export class AdminController {
     @Body() dto: UpdatePlatformSettingsDto,
   ) {
     return this.adminService.updateSettings(dto, tenant.userId);
+  }
+
+  @Roles(UserRole.SUPER_ADMIN)
+  @RequirePermissions(Permission.MANAGE_PLATFORM)
+  @Get('admin/subscription-packages')
+  getSubscriptionPackages() {
+    return this.adminService.getSubscriptionPackages();
+  }
+
+  @Roles(UserRole.SUPER_ADMIN)
+  @RequirePermissions(Permission.MANAGE_PLATFORM)
+  @Patch('admin/subscription-packages')
+  updateSubscriptionPackages(
+    @CurrentTenant() tenant: TenantContext,
+    @Body() dto: UpdateSubscriptionPackagesDto,
+  ) {
+    return this.adminService.updateSubscriptionPackages(dto, tenant.userId);
   }
 
   @Roles(UserRole.SUPER_ADMIN)

@@ -8,3 +8,4 @@ export const SCHOOL_ADMIN_ID = '66666666-6666-6666-6666-666666666666';
 export const TEST_CLASS_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 export const TEST_QUIZ_ID = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 export const FOREIGN_SCHOOL_ID = '99999999-9999-9999-9999-999999999999';
+export const UNLISTED_SCHOOL_ID = '77777777-7777-7777-7777-777777777777';

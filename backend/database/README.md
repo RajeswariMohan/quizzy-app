@@ -20,7 +20,7 @@ database/
 | `schools` | — | Tenant root; whitelabel fields |
 | `users` | FK (nullable for `SUPER_ADMIN`) | RBAC roles, XP, streaks |
 | `classes` | FK, indexed | Classrooms per school |
-| `quizzes` | FK, indexed | Linked to class + creator |
+| `quizzes` | FK, indexed | Linked to class + creator; optional `topic` varchar (see `docs/quiz-topics.md`) |
 | `questions` | FK, indexed | Hybrid `MANUAL` / `AI_GENERATED` lineage |
 | `student_responses` | FK, indexed | One answer per student per question |
 | `ai_generation_tasks` | FK, indexed | Async AI generation status + metrics (`002` migration) |

@@ -1,9 +1,8 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { Controller, ForbiddenException, Get, Post, Query } from '@nestjs/common';
 import { UserRole } from '@database/enums/user-role.enum';
 import { CurrentTenant, RequirePermissions, Roles } from '../auth';
 import { Permission } from '../auth/rbac/role-permissions';
 import { TenantContext } from '../auth/interfaces/tenant-context.interface';
-import { LinkStudentDto } from './dto/link-student.dto';
 import { ParentService } from './parent.service';
 
 @Controller('parent')
@@ -19,8 +18,10 @@ export class ParentController {
 
   @Post('link')
   @RequirePermissions(Permission.VIEW_CHILD_PROGRESS)
-  linkStudent(@CurrentTenant() tenant: TenantContext, @Body() dto: LinkStudentDto) {
-    return this.parentService.linkStudent(tenant, dto.studentEmail);
+  linkStudent() {
+    throw new ForbiddenException(
+      'Manual linking is disabled. Register as a parent using the same email your child entered at signup.',
+    );
   }
 
   @Get('child-summary')

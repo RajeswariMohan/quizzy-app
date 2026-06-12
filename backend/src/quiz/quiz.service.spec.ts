@@ -6,10 +6,21 @@ import { Quiz } from '@database/entities/quiz.entity';
 import { StudentResponse } from '@database/entities/student-response.entity';
 import { User } from '@database/entities/user.entity';
 import { QuizStatus } from '@database/enums/quiz-status.enum';
-import { buildTeacherTenant } from '../../test/helpers/tenant-fixtures';
-import { SCHOOL_ID, TEST_CLASS_ID } from '../../test/helpers/constants';
+import {
+  buildSchoolAdminTenant,
+  buildSuperAdminTenant,
+  buildTeacherTenant,
+} from '../../test/helpers/tenant-fixtures';
+import {
+  SCHOOL_ADMIN_ID,
+  SCHOOL_ID,
+  SUPER_ADMIN_ID,
+  TEACHER_ID,
+  TEST_CLASS_ID,
+} from '../../test/helpers/constants';
 import { TenantContextService } from '../auth/services/tenant-context.service';
 import { SchoolAcademicsService } from '../school-admin/school-academics.service';
+import { SchoolFeatureService } from '../school/school-feature.service';
 import { QuizService } from './quiz.service';
 
 describe('QuizService', () => {
@@ -17,11 +28,15 @@ describe('QuizService', () => {
   let quizSave: jest.Mock;
   let classFindOne: jest.Mock;
   let quizFindOne: jest.Mock;
+  let quizFind: jest.Mock;
+  let quizCreateQueryBuilder: jest.Mock;
 
   beforeEach(async () => {
     quizSave = jest.fn((entity) => Promise.resolve({ id: 'new-quiz-id', ...entity }));
     classFindOne = jest.fn();
     quizFindOne = jest.fn();
+    quizFind = jest.fn().mockResolvedValue([]);
+    quizCreateQueryBuilder = jest.fn();
 
     const module = await Test.createTestingModule({
       providers: [
@@ -32,6 +47,8 @@ describe('QuizService', () => {
             create: jest.fn((data) => data),
             save: quizSave,
             findOne: quizFindOne,
+            find: quizFind,
+            createQueryBuilder: quizCreateQueryBuilder,
           },
         },
         {
@@ -50,6 +67,7 @@ describe('QuizService', () => {
           provide: TenantContextService,
           useValue: {
             resolveSchoolIdForQuery: jest.fn(() => SCHOOL_ID),
+            resolveSchoolIdsForQuery: jest.fn(() => [SCHOOL_ID]),
           },
         },
         {
@@ -59,7 +77,15 @@ describe('QuizService', () => {
               grades: ['Class 8'],
               sections: ['A'],
               subjects: ['Science'],
+              subscriptionTier: 'STANDARD',
             }),
+          },
+        },
+        {
+          provide: SchoolFeatureService,
+          useValue: {
+            assertFeature: jest.fn().mockResolvedValue(undefined),
+            assertPublishScopeAllowed: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],
@@ -98,6 +124,7 @@ describe('QuizService', () => {
     quizFindOne.mockResolvedValue({
       id: 'quiz-1',
       schoolId: SCHOOL_ID,
+      createdByUserId: TEACHER_ID,
       questions: [],
     });
 
@@ -112,6 +139,74 @@ describe('QuizService', () => {
   it('findOne throws NotFoundException when quiz missing in tenant', async () => {
     quizFindOne.mockResolvedValue(null);
     await expect(service.findOne(buildTeacherTenant(), 'missing')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it('listForTeacher scopes teachers to their own created_by_user_id', async () => {
+    await service.listForTeacher(buildTeacherTenant(), {});
+    expect(quizFind).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          schoolId: expect.anything(),
+          createdByUserId: TEACHER_ID,
+        }),
+      }),
+    );
+  });
+
+  it('listForTeacher does not scope school admins to a single creator', async () => {
+    await service.listForTeacher(buildSchoolAdminTenant(), {});
+    const call = quizFind.mock.calls[0][0];
+    expect(call.where.createdByUserId).toBeUndefined();
+  });
+
+  it('listForTeacher scopes super admins to their own created_by_user_id', async () => {
+    await service.listForTeacher(buildSuperAdminTenant(), {});
+    expect(quizFind).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          createdByUserId: SUPER_ADMIN_ID,
+        }),
+      }),
+    );
+  });
+
+  it('listTopicSuggestionsForSchool returns distinct topics without creator filter', async () => {
+    const getRawMany = jest
+      .fn()
+      .mockResolvedValue([{ value: 'Algebra' }, { value: 'Photosynthesis' }]);
+    const qb = {
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      getRawMany,
+    };
+    quizCreateQueryBuilder.mockReturnValue(qb);
+
+    const result = await service.listTopicSuggestionsForSchool(buildTeacherTenant(), {
+      subject: 'Science',
+      grade: '8',
+    });
+
+    expect(result.topics).toEqual(['Algebra', 'Photosynthesis']);
+    expect(qb.where).toHaveBeenCalledWith(
+      'q.school_id IN (:...schoolIds)',
+      expect.objectContaining({ schoolIds: [SCHOOL_ID] }),
+    );
+    expect(qb.andWhere).toHaveBeenCalledWith('q.subject = :subject', { subject: 'Science' });
+    expect(qb.andWhere).toHaveBeenCalledWith('q.grade = :grade', { grade: '8' });
+  });
+
+  it('findOne rejects another teacher quiz in the same school', async () => {
+    quizFindOne.mockResolvedValue({
+      id: 'quiz-1',
+      schoolId: SCHOOL_ID,
+      createdByUserId: SCHOOL_ADMIN_ID,
+      questions: [],
+    });
+    await expect(service.findOne(buildTeacherTenant(), 'quiz-1')).rejects.toBeInstanceOf(
       NotFoundException,
     );
   });

@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { RefreshCw, Pencil, UserX, UserCheck, Trash2 } from 'lucide-react';
+import { RefreshCw, Pencil, UserX, UserCheck, Trash2, X } from 'lucide-react';
 import { FilterPanel } from '@/components/layout/FilterPanel';
 import { PageWithScrollBelowFilter } from '@/components/layout/PageWithScrollBelowFilter';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { FieldSelect } from '@/components/ui/FieldSelect';
-import { PasswordInput } from '@/components/ui/PasswordInput';
+import { TableSearchInput } from '@/components/ui/TableSearchInput';
 import {
   createSchoolUser,
   fetchSchoolAcademicConfig,
+  fetchSchoolAdminOverview,
   fetchSchoolUsers,
   setSchoolUserActive,
   deleteSchoolUser,
@@ -21,33 +22,87 @@ import {
 } from '@/api/schoolAdmin.api';
 import { getApiErrorMessage, logApiError } from '@/api/client';
 import { BulkUserUpload } from '@/components/school-admin/BulkUserUpload';
+import { AcademicGroupFilterFields } from '@/components/academics/AcademicGroupFilterFields';
+import {
+  isSchoolUserOnboardValid,
+  SchoolUserOnboardFields,
+  type SchoolUserOnboardValues,
+} from '@/components/school-admin/SchoolUserOnboardFields';
+import {
+  childGroupLabel,
+  DEFAULT_ACADEMIC_GROUP_FILTER,
+  departmentLabel,
+  inferGradeKind,
+  resolveFilterSectionValue,
+  type AcademicGroupFilterValues,
+} from '@/utils/gradeStructure';
 import {
   EditSchoolUserDialog,
   isEditableSchoolUser,
 } from '@/components/school-admin/EditSchoolUserDialog';
 import { useClientPagination } from '@/hooks/useClientPagination';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useSchoolAcademics } from '@/hooks/useSchoolAcademics';
+import { useSchoolFeatures } from '@/hooks/useSchoolFeatures';
+import { useAuthStore } from '@/store/authStore';
 import { TablePagination } from '@/components/ui/TablePagination';
 
+const EMPTY_ONBOARD_VALUES: SchoolUserOnboardValues = {
+  firstName: '',
+  lastName: '',
+  role: 'STUDENT',
+  username: '',
+  email: '',
+  parentEmail: '',
+  password: '',
+  grade: '',
+  section: '',
+};
+
 export function SchoolAdminUsersPage() {
+  const { features } = useSchoolFeatures();
+  const schoolId = useAuthStore((s) => s.user?.schoolId ?? null);
+  const { gradeSections: schoolGradeSections } = useSchoolAcademics();
   const [users, setUsers] = useState<SchoolUserRow[]>([]);
   const [academics, setAcademics] = useState<SchoolAcademicConfig | null>(null);
+  const [isUnlistedSchool, setIsUnlistedSchool] = useState(false);
   const [filterRole, setFilterRole] = useState<'ALL' | 'STUDENT' | 'TEACHER' | 'PARENT'>('ALL');
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ACTIVE');
+  const [search, setSearch] = useState('');
+  const [filterGrade, setFilterGrade] = useState('All');
+  const [filterAcademicGroup, setFilterAcademicGroup] = useState<AcademicGroupFilterValues>({
+    ...DEFAULT_ACADEMIC_GROUP_FILTER,
+  });
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [actionUserId, setActionUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [role, setRole] = useState<CreateSchoolUserPayload['role']>('STUDENT');
-  const [grade, setGrade] = useState('');
-  const [section, setSection] = useState('');
+  const [onboardValues, setOnboardValues] = useState<SchoolUserOnboardValues>(EMPTY_ONBOARD_VALUES);
+  const [usernameSubmitBlocked, setUsernameSubmitBlocked] = useState(false);
   const [editingUser, setEditingUser] = useState<SchoolUserRow | null>(null);
+
+  const setOnboardField = <K extends keyof SchoolUserOnboardValues>(
+    field: K,
+    value: SchoolUserOnboardValues[K],
+  ) => {
+    setOnboardValues((prev) => {
+      if (field === 'role') {
+        return {
+          ...prev,
+          role: value as SchoolUserOnboardValues['role'],
+          username: '',
+          email: '',
+          parentEmail: '',
+          grade: '',
+          section: '',
+        };
+      }
+      return { ...prev, [field]: value };
+    });
+  };
 
   const load = useCallback(() => {
     setIsLoading(true);
@@ -58,23 +113,67 @@ export function SchoolAdminUsersPage() {
         : filterStatus === 'INACTIVE'
           ? 'inactive'
           : 'active';
+    const gradeSections = schoolGradeSections;
+    const sectionFilter =
+      filterGrade !== 'All'
+        ? resolveFilterSectionValue({
+            grade: filterGrade,
+            gradeSections,
+            ...filterAcademicGroup,
+          })
+        : undefined;
+
     Promise.all([
       fetchSchoolUsers({
         role: filterRole === 'ALL' ? undefined : filterRole,
         status,
+        search: debouncedSearch,
+        grade: filterGrade === 'All' ? undefined : filterGrade,
+        section: sectionFilter,
       }),
       fetchSchoolAcademicConfig(),
+      fetchSchoolAdminOverview(),
     ])
-      .then(([userRows, academicConfig]) => {
+      .then(([userRows, academicConfig, overview]) => {
         setUsers(userRows);
         setAcademics(academicConfig);
+        setIsUnlistedSchool(overview.school.slug === 'unlisted');
       })
       .catch((err) => {
         logApiError('Load school users failed', err);
         setError(getApiErrorMessage(err, 'Could not load users.'));
       })
       .finally(() => setIsLoading(false));
-  }, [filterRole, filterStatus]);
+  }, [
+    filterRole,
+    filterStatus,
+    debouncedSearch,
+    filterGrade,
+    filterAcademicGroup,
+    schoolGradeSections,
+  ]);
+
+  const filterGroupColumnLabel =
+    filterGrade !== 'All' && inferGradeKind(filterGrade) === 'senior_secondary'
+      ? departmentLabel()
+      : childGroupLabel();
+
+  const hasActiveFilters =
+    search.trim() !== '' ||
+    filterRole !== 'ALL' ||
+    filterStatus !== 'ACTIVE' ||
+    filterGrade !== 'All' ||
+    filterAcademicGroup.department !== 'All' ||
+    filterAcademicGroup.sectionLetter !== 'All' ||
+    filterAcademicGroup.group !== 'All';
+
+  const clearFilters = () => {
+    setSearch('');
+    setFilterRole('ALL');
+    setFilterStatus('ACTIVE');
+    setFilterGrade('All');
+    setFilterAcademicGroup({ ...DEFAULT_ACADEMIC_GROUP_FILTER });
+  };
 
   const handleSetActive = async (user: SchoolUserRow, isActive: boolean) => {
     const action = isActive ? 'reactivate' : 'deactivate';
@@ -135,24 +234,25 @@ export function SchoolAdminUsersPage() {
     setFormError(null);
     setFormSuccess(null);
     try {
+      const { firstName, lastName, password, role, username, email, parentEmail, grade, section } =
+        onboardValues;
       const payload: CreateSchoolUserPayload = {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
-        email: email.trim(),
         password,
         role,
       };
       if (role === 'STUDENT') {
+        payload.username = username.trim();
+        payload.parentEmail = parentEmail.trim();
         payload.grade = grade;
         payload.section = section;
+      } else {
+        payload.email = email.trim();
       }
       await createSchoolUser(payload);
-      setFirstName('');
-      setLastName('');
-      setEmail('');
-      setPassword('');
-      setGrade('');
-      setSection('');
+      setOnboardValues(EMPTY_ONBOARD_VALUES);
+      setFormSuccess('User created successfully.');
       load();
     } catch (err) {
       logApiError('Create school user failed', err);
@@ -162,10 +262,13 @@ export function SchoolAdminUsersPage() {
     }
   };
 
-  const isStudent = role === 'STUDENT';
+  const canSubmit =
+    isSchoolUserOnboardValid(onboardValues, { academicsRequired: true }) &&
+    !usernameSubmitBlocked &&
+    !(onboardValues.role === 'STUDENT' && !academics);
 
   const usersPagination = useClientPagination(users, {
-    resetKey: `${filterRole}|${filterStatus}|${users.length}`,
+    resetKey: `${filterRole}|${filterStatus}|${debouncedSearch}|${filterGrade}|${filterAcademicGroup.department}|${filterAcademicGroup.group}|${users.length}`,
   });
 
   return (
@@ -185,21 +288,62 @@ export function SchoolAdminUsersPage() {
       filter={
         <FilterPanel>
           <div className="flex flex-wrap items-end justify-between gap-3">
-            <CardTitle>School directory</CardTitle>
-            <div className="flex flex-wrap gap-3">
-              <FieldSelect
-                label="Role"
-                value={filterRole}
-                onChange={(v) => setFilterRole(v as typeof filterRole)}
-                options={['ALL', 'STUDENT', 'TEACHER', 'PARENT']}
-              />
-              <FieldSelect
-                label="Status"
-                value={filterStatus}
-                onChange={(v) => setFilterStatus(v as typeof filterStatus)}
-                options={['ACTIVE', 'INACTIVE', 'ALL']}
-              />
+            <div>
+              <CardTitle>School directory</CardTitle>
+              <p className="mt-0.5 text-xs text-muted">
+                {isLoading ? 'Loading…' : `${users.length} user${users.length === 1 ? '' : 's'} found`}
+                {hasActiveFilters ? ' · filters active' : ''}
+              </p>
             </div>
+            {hasActiveFilters && (
+              <Button type="button" variant="outline" size="sm" onClick={clearFilters}>
+                <X className="h-4 w-4" />
+                Clear filters
+              </Button>
+            )}
+          </div>
+          <div className="mt-3">
+            <TableSearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Name, email, or username…"
+              label="Search users"
+            />
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <FieldSelect
+              label="Role"
+              value={filterRole}
+              onChange={(v) => setFilterRole(v as typeof filterRole)}
+              options={['ALL', 'STUDENT', 'TEACHER', 'PARENT']}
+            />
+            <FieldSelect
+              label="Status"
+              value={filterStatus}
+              onChange={(v) => setFilterStatus(v as typeof filterStatus)}
+              options={['ACTIVE', 'INACTIVE', 'ALL']}
+            />
+            <FieldSelect
+              label="Grade"
+              value={filterGrade}
+              onChange={(v) => {
+                setFilterGrade(v);
+                setFilterAcademicGroup({ ...DEFAULT_ACADEMIC_GROUP_FILTER });
+              }}
+              options={academics ? ['All', ...academics.grades] : ['All']}
+              disabled={!academics}
+            />
+            {filterGrade !== 'All' && academics && (
+              <div className="sm:col-span-2 lg:col-span-3">
+                <AcademicGroupFilterFields
+                  grade={filterGrade}
+                  gradeSections={academics.gradeSections}
+                  values={filterAcademicGroup}
+                  onChange={setFilterAcademicGroup}
+                  disabled={!academics}
+                />
+              </div>
+            )}
           </div>
           {error && <p className="mt-2 text-sm text-danger">{error}</p>}
         </FilterPanel>
@@ -207,70 +351,23 @@ export function SchoolAdminUsersPage() {
     >
       <Card>
         <CardTitle>Add user</CardTitle>
-        <form onSubmit={(e) => void handleCreate(e)} className="mt-4 grid gap-3 sm:grid-cols-2">
-          <input
-            className="rounded-xl border border-gray-200 px-3 py-2 text-sm"
-            placeholder="First name"
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            required
+        <form onSubmit={(e) => void handleCreate(e)} className="mt-4">
+          <SchoolUserOnboardFields
+            values={onboardValues}
+            onChange={setOnboardField}
+            academics={academics}
+            schoolId={schoolId}
+            parentPortalEnabled={features.parentPortalEnabled}
+            disabled={isSaving}
+            onSubmitBlockedChange={setUsernameSubmitBlocked}
           />
-          <input
-            className="rounded-xl border border-gray-200 px-3 py-2 text-sm"
-            placeholder="Last name"
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            required
-          />
-          <input
-            type="email"
-            className="rounded-xl border border-gray-200 px-3 py-2 text-sm sm:col-span-2"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <PasswordInput
-            wrapperClassName="sm:col-span-2"
-            placeholder="Temporary password (min 8 chars)"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={8}
-          />
-          <FieldSelect
-            label="Role"
-            value={role}
-            onChange={(v) => setRole(v as CreateSchoolUserPayload['role'])}
-            options={['STUDENT', 'TEACHER', 'PARENT']}
-          />
-          {isStudent && academics && (
-            <>
-              <FieldSelect
-                label="Grade / standard"
-                value={grade}
-                onChange={setGrade}
-                options={academics.grades}
-                placeholder="Select grade"
-                required
-              />
-              <FieldSelect
-                label="Section"
-                value={section}
-                onChange={setSection}
-                options={academics.sections}
-                placeholder="Select section"
-                required
-              />
-            </>
-          )}
-          <div className={`flex items-end ${isStudent ? 'sm:col-span-2' : ''}`}>
-            <Button type="submit" disabled={isSaving || (isStudent && !academics)}>
+          <div className="mt-4 flex items-center gap-3">
+            <Button type="submit" disabled={isSaving || !canSubmit}>
               {isSaving ? 'Creating…' : 'Create account'}
             </Button>
           </div>
         </form>
-        {isStudent && (
+        {onboardValues.role === 'STUDENT' && (
           <p className="mt-3 text-sm text-muted">
             Grade and section options are managed on the{' '}
             <Link to="/school-admin/academics" className="font-medium text-primary hover:underline">
@@ -283,7 +380,8 @@ export function SchoolAdminUsersPage() {
         {formSuccess && <p className="mt-2 text-sm text-success">{formSuccess}</p>}
         <BulkUserUpload
           academics={academics}
-          disabled={isSaving || isLoading}
+          disabled={isSaving}
+          importEnabled={features.bulkUserImportEnabled}
           onImported={(count) => {
             setFormSuccess(`Imported ${count} user${count === 1 ? '' : 's'} successfully.`);
             load();
@@ -297,9 +395,12 @@ export function SchoolAdminUsersPage() {
             <thead>
               <tr className="border-b border-gray-100 text-muted">
                 <th className="pb-2 pr-3 font-medium">Name</th>
-                <th className="pb-2 pr-3 font-medium">Email</th>
+                <th className="pb-2 pr-3 font-medium">Login</th>
                 <th className="pb-2 pr-3 font-medium">Grade</th>
-                <th className="pb-2 pr-3 font-medium">Section</th>
+                <th className="pb-2 pr-3 font-medium">{filterGroupColumnLabel}</th>
+                {isUnlistedSchool && (
+                  <th className="pb-2 pr-3 font-medium">School note</th>
+                )}
                 <th className="pb-2 pr-3 font-medium">Role</th>
                 <th className="pb-2 pr-3 font-medium">Status</th>
                 <th className="pb-2 font-medium">Actions</th>
@@ -317,13 +418,24 @@ export function SchoolAdminUsersPage() {
                     <td className="py-2.5 pr-3 font-medium">
                       {u.firstName} {u.lastName}
                     </td>
-                    <td className="py-2.5 pr-3">{u.email}</td>
+                    <td className="py-2.5 pr-3">
+                      {u.role === 'STUDENT' && u.username ? (
+                        <span title={u.email}>{u.username}</span>
+                      ) : (
+                        u.email
+                      )}
+                    </td>
                     <td className="py-2.5 pr-3">
                       {u.role === 'STUDENT' ? (u.grade ?? '—') : '—'}
                     </td>
                     <td className="py-2.5 pr-3">
                       {u.role === 'STUDENT' ? (u.section ?? '—') : '—'}
                     </td>
+                    {isUnlistedSchool && (
+                      <td className="max-w-[220px] truncate py-2.5 pr-3 text-muted">
+                        {u.role === 'STUDENT' ? (u.signupSchoolNote ?? '—') : '—'}
+                      </td>
+                    )}
                     <td className="py-2.5 pr-3">{u.role.replace('_', ' ')}</td>
                     <td className="py-2.5 pr-3">
                       {u.isActive ? (
@@ -393,7 +505,7 @@ export function SchoolAdminUsersPage() {
             <p className="px-4 py-4 text-sm text-muted">No users found.</p>
           )}
         </div>
-        {usersPagination.showPagination && !isLoading && users.length > 0 && (
+        {!isLoading && users.length > 0 && (
           <TablePagination
             page={usersPagination.page}
             totalPages={usersPagination.totalPages}

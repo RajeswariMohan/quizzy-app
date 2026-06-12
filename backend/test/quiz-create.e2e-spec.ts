@@ -1,18 +1,26 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { AuthService } from '../src/auth/auth.service';
-import { SCHOOL_ID, TEACHER_ID, TEST_CLASS_ID, TEST_QUIZ_ID } from './helpers/constants';
+import {
+  SCHOOL_ADMIN_ID,
+  SCHOOL_ID,
+  TEACHER_ID,
+  TEST_CLASS_ID,
+  TEST_QUIZ_ID,
+} from './helpers/constants';
 import { createTestApp } from './helpers/create-test-app';
 
 describe('Quiz creation (e2e)', () => {
   let app: INestApplication;
   let teacherToken: string;
+  let schoolAdminToken: string;
 
   beforeAll(async () => {
     const testApp = await createTestApp();
     app = testApp.app;
     const authService = testApp.module.get(AuthService);
     teacherToken = (await authService.issueTokensForUser(TEACHER_ID)).accessToken;
+    schoolAdminToken = (await authService.issueTokensForUser(SCHOOL_ADMIN_ID)).accessToken;
   });
 
   afterAll(async () => {
@@ -114,12 +122,63 @@ describe('Quiz creation (e2e)', () => {
       .patch(`/api/quizzes/${TEST_QUIZ_ID}/publish`)
       .set('Authorization', `Bearer ${teacherToken}`)
       .send({
-        audienceScope: 'GRADE_SECTION',
-        targets: [{ grade: 'Class 5', section: 'A' }],
+        audienceScope: 'GRADE',
+        targets: [{ grade: 'Class 5' }],
       })
       .expect(200);
 
     expect(publishRes.body.status).toBe('PUBLISHED');
     expect(publishRes.body.publishedAt).toBeTruthy();
+  });
+
+  it('GET /api/quizzes lists only quizzes created by the teacher', async () => {
+    const adminQuiz = await request(app.getHttpServer())
+      .post('/api/quizzes')
+      .set('Authorization', `Bearer ${schoolAdminToken}`)
+      .send({
+        classId: TEST_CLASS_ID,
+        title: `Admin-only quiz ${Date.now()}`,
+        subject: 'English',
+        topic: 'Grammar',
+      })
+      .expect(201);
+
+    const teacherQuiz = await request(app.getHttpServer())
+      .post('/api/quizzes')
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({
+        classId: TEST_CLASS_ID,
+        title: `Teacher quiz ${Date.now()}`,
+        subject: 'Science',
+        topic: 'Plants',
+      })
+      .expect(201);
+
+    const list = await request(app.getHttpServer())
+      .get('/api/quizzes')
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .expect(200);
+
+    const ids = list.body.map((q: { id: string }) => q.id);
+    expect(ids).toContain(teacherQuiz.body.id);
+    expect(ids).not.toContain(adminQuiz.body.id);
+  });
+
+  it('GET /api/quizzes/:id returns 404 for another user quiz in same school', async () => {
+    const adminQuiz = await request(app.getHttpServer())
+      .post('/api/quizzes')
+      .set('Authorization', `Bearer ${schoolAdminToken}`)
+      .send({
+        classId: TEST_CLASS_ID,
+        title: `Admin quiz access ${Date.now()}`,
+        subject: 'Science',
+        topic: 'Cells',
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .get(`/api/quizzes/${adminQuiz.body.id}`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .expect(404);
   });
 });

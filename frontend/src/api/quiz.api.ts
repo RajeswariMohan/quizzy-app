@@ -2,6 +2,7 @@ import { apiClient } from './client';
 import type {
   CreateQuizPayload,
   PublishQuizPayload,
+  QuizStatus,
   QuizSummary,
   UpdateQuizPayload,
 } from '@/types/quiz';
@@ -16,8 +17,28 @@ export async function getQuiz(quizId: string): Promise<QuizSummary & { descripti
   return data;
 }
 
-export async function listQuizzes(): Promise<QuizSummary[]> {
-  const { data } = await apiClient.get<QuizSummary[]>('/quizzes');
+export interface ListQuizzesParams {
+  dateFrom?: string;
+  dateTo?: string;
+  status?: QuizStatus;
+}
+
+export async function listQuizzes(params?: ListQuizzesParams): Promise<QuizSummary[]> {
+  const { data } = await apiClient.get<QuizSummary[]>('/quizzes', { params });
+  return data;
+}
+
+export interface QuizTopicSuggestionsParams {
+  subject: string;
+  grade?: string;
+}
+
+export async function fetchQuizTopicSuggestions(
+  params: QuizTopicSuggestionsParams,
+): Promise<{ topics: string[] }> {
+  const { data } = await apiClient.get<{ topics: string[] }>('/quizzes/academic-suggestions', {
+    params,
+  });
   return data;
 }
 

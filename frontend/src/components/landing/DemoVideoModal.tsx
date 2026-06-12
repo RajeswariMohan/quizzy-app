@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Play, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { FileUploadCancelButton } from '@/components/ui/FileUploadCancel';
 import { PUBLIC_SITE } from '@/config/publicSite';
 import {
   clearDemoVideoBlob,
@@ -253,9 +254,14 @@ export function DemoVideoModal({ open, onClose }: DemoVideoModalProps) {
               )}
             </div>
             {uploadError && (
-              <p className="mt-2 text-sm text-danger" role="alert">
-                {uploadError}
-              </p>
+              <div className="mt-2 space-y-2" role="alert">
+                <p className="text-sm text-danger">{uploadError}</p>
+                <FileUploadCancelButton
+                  onCancel={() => setUploadError(null)}
+                  disabled={isUploading}
+                  label="Dismiss"
+                />
+              </div>
             )}
           </div>
         </div>

@@ -10,12 +10,8 @@ import { formatQuizCreator, resolveQuizGrade } from '@/utils/quizMeta';
 import {
   ANALYTICS_FILTER_ALL,
   applyAnalyticsFilterField,
-  buildCreatorLabelByUserId,
-  buildCreatorOptionLabels,
-  filterCreatorsByQuizzes,
   getLinkedFilterValues,
   mergeAnalyticsFilterOptions,
-  resolveCreatorUserId,
   withAllOption,
 } from '@/utils/analyticsFilterLinks';
 import type { QuizStatus, QuizSummary } from '@/types/quiz';
@@ -126,16 +122,6 @@ export function QuizPerformanceTable({
     [links, filters, mergedOptions.grades, mergedOptions.subjects, mergedOptions.topics],
   );
 
-  const visibleCreators = useMemo(
-    () => filterCreatorsByQuizzes(mergedOptions.creators, quizzes),
-    [mergedOptions.creators, quizzes],
-  );
-  const creatorOptions = buildCreatorOptionLabels(visibleCreators);
-  const creatorLabelByUserId = buildCreatorLabelByUserId(visibleCreators);
-  const selectedCreatorLabel = filters.createdByUserId
-    ? creatorLabelByUserId.get(filters.createdByUserId) ?? ANALYTICS_FILTER_ALL
-    : ANALYTICS_FILTER_ALL;
-
   const setPageField = (key: keyof AnalyticsQueryFilters, raw: string) => {
     onFiltersChange(
       applyAnalyticsFilterField(
@@ -154,7 +140,7 @@ export function QuizPerformanceTable({
     [quizzes, statusFilter, sortBy],
   );
 
-  const paginationResetKey = `${statusFilter}|${sortBy}|${filters.grade ?? ''}|${filters.createdByUserId ?? ''}|${quizzes.length}`;
+  const paginationResetKey = `${statusFilter}|${sortBy}|${filters.grade ?? ''}|${quizzes.length}`;
   const pagination = useClientPagination(displayed, { resetKey: paginationResetKey });
 
   const accuracySortActive = sortBy === 'accuracy_desc' || sortBy === 'accuracy_asc';
@@ -184,24 +170,13 @@ export function QuizPerformanceTable({
             </Button>
           )}
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <FieldSelect
             label="Grade"
             value={filters.grade ?? ANALYTICS_FILTER_ALL}
             onChange={(v) => setPageField('grade', v)}
             options={withAllOption(linkedValues.grades)}
           />
-          {creatorOptions.length > 0 && (
-            <FieldSelect
-              label="Created by"
-              value={selectedCreatorLabel}
-              onChange={(label) => {
-                const userId = resolveCreatorUserId(label, visibleCreators);
-                onFiltersChange({ ...filters, createdByUserId: userId });
-              }}
-              options={withAllOption(creatorOptions)}
-            />
-          )}
           <FieldSelect
             label="Status"
             value={filterToStatusLabel(statusFilter)}

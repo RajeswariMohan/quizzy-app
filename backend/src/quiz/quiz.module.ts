@@ -6,6 +6,7 @@ import { StudentResponse } from '@database/entities/student-response.entity';
 import { User } from '@database/entities/user.entity';
 import { AuthModule } from '../auth/auth.module';
 import { SchoolAcademicsModule } from '../school-admin/school-academics.module';
+import { SchoolsModule } from '../school/schools.module';
 import { QuizController } from './quiz.controller';
 import { QuizService } from './quiz.service';
 
@@ -14,6 +15,7 @@ import { QuizService } from './quiz.service';
     TypeOrmModule.forFeature([Quiz, Class, StudentResponse, User]),
     AuthModule,
     SchoolAcademicsModule,
+    SchoolsModule,
   ],
   controllers: [QuizController],
   providers: [QuizService],

@@ -15,6 +15,7 @@ import { UserRole } from '@database/enums/user-role.enum';
 import { TenantContext } from '../auth/interfaces/tenant-context.interface';
 import { TenantContextService } from '../auth/services/tenant-context.service';
 import { ParentStudentLinkService } from '../parent/parent-student-link.service';
+import { applyUserSectionFilter } from '../school-admin/academic-section-filter.util';
 import { ProgressStudentsQueryDto } from './dto/progress-students-query.dto';
 
 @Injectable()
@@ -79,7 +80,7 @@ export class ProgressService {
       qb.andWhere('u.grade = :grade', { grade: query.grade.trim() });
     }
     if (query.section?.trim()) {
-      qb.andWhere('u.section = :section', { section: query.section.trim() });
+      applyUserSectionFilter(qb, 'u', query.section.trim(), query.grade?.trim());
     }
     if (query.search?.trim()) {
       const term = `%${query.search.trim().toLowerCase()}%`;

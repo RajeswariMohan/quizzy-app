@@ -40,6 +40,10 @@ Ensure the NestJS API runs on port 3000 (Vite proxies `/api`).
 | `src/pages/TeacherDashboard.tsx` | Panel 10 + quiz creator |
 | `src/pages/ParentDashboard.tsx` | Panels 7, 9 |
 
+## Quiz topics
+
+See [`docs/quiz-topics.md`](../docs/quiz-topics.md) for how `quizzes.topic` is stored, set, and used in filters (subjects come from school config; topics do not).
+
 ## Backend integration
 
 - `POST /api/quizzes/:quizId/questions/ai-generate` → 202, then poll `GET /api/ai-generation-tasks/:taskId`

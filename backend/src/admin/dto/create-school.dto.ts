@@ -1,4 +1,5 @@
-import { IsEmail, IsInt, IsOptional, IsString, Matches, MaxLength, Min, MinLength } from 'class-validator';
+import { IsEmail, IsEnum, IsInt, IsOptional, IsString, Matches, MaxLength, Min, MinLength } from 'class-validator';
+import { SchoolSubscriptionTier } from '@database/enums/school-subscription-tier.enum';
 
 export class CreateSchoolDto {
   @IsString()
@@ -41,6 +42,10 @@ export class CreateSchoolDto {
   @IsInt()
   @Min(1)
   maxParents?: number;
+
+  @IsOptional()
+  @IsEnum(SchoolSubscriptionTier)
+  subscriptionTier?: SchoolSubscriptionTier;
 
   /** Required: first school admin for the new tenant */
   @IsEmail()

@@ -8,11 +8,8 @@ import {
   LandingFeaturesSection,
   LandingHowItWorksSection,
 } from '@/components/landing/LandingSections';
-import { useRedirectIfAuthenticated } from '@/hooks/useRedirectIfAuthenticated';
-
 export function WelcomePage() {
   const { hash } = useLocation();
-  useRedirectIfAuthenticated();
 
   useEffect(() => {
     if (!hash) return;

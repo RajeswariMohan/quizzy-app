@@ -18,6 +18,7 @@ import { AdminOverviewPage } from '@/pages/admin/AdminOverviewPage';
 import { AdminSchoolsPage } from '@/pages/admin/AdminSchoolsPage';
 import { AdminAnalyticsPage } from '@/pages/admin/AdminAnalyticsPage';
 import { AdminSettingsPage } from '@/pages/admin/AdminSettingsPage';
+import { AdminPackagesPage } from '@/pages/admin/AdminPackagesPage';
 import { SchoolAdminDashboardPage } from '@/pages/school-admin/SchoolAdminDashboardPage';
 import { SchoolAdminUsersPage } from '@/pages/school-admin/SchoolAdminUsersPage';
 import { SchoolAdminAcademicsPage } from '@/pages/school-admin/SchoolAdminAcademicsPage';
@@ -213,6 +214,14 @@ export function AppRoutes() {
           element={
             <ProtectedRoute roles={['SUPER_ADMIN']}>
               <AdminAnalyticsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin/packages"
+          element={
+            <ProtectedRoute roles={['SUPER_ADMIN']}>
+              <AdminPackagesPage />
             </ProtectedRoute>
           }
         />

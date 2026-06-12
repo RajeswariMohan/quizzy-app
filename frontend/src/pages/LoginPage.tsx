@@ -6,18 +6,15 @@ import { PasswordInput } from '@/components/ui/PasswordInput';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { useAuthStore } from '@/store/authStore';
 import { roleHome } from '@/utils/roleHome';
-import { useRedirectIfAuthenticated } from '@/hooks/useRedirectIfAuthenticated';
-
 export function LoginPage() {
   const navigate = useNavigate();
-  useRedirectIfAuthenticated();
   const { loginWithCredentials, isLoading, error } = useAuthStore();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await loginWithCredentials(email.trim(), password);
+    await loginWithCredentials(identifier.trim(), password);
     const state = useAuthStore.getState();
     if (state.isAuthenticated && state.user) {
       navigate(roleHome(state.user.role));
@@ -38,18 +35,18 @@ export function LoginPage() {
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-4">
         <div>
-          <label htmlFor="login-email" className="mb-1 block text-sm font-medium text-ink">
-            Email
+          <label htmlFor="login-identifier" className="mb-1 block text-sm font-medium text-ink">
+            Email or username
           </label>
           <input
-            id="login-email"
-            type="email"
+            id="login-identifier"
+            type="text"
             required
-            autoComplete="email"
+            autoComplete="username"
             className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-            placeholder="you@school.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@school.com or your username"
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
           />
         </div>
         <div>

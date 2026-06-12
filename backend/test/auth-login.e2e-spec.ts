@@ -1,6 +1,12 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
+import { buildStudentLoginEmail } from '../src/auth/constants/username.util';
+import { SCHOOL_ID } from './helpers/constants';
 import { createTestApp } from './helpers/create-test-app';
+
+function uniqueUsername(prefix: string): string {
+  return `${prefix}${Date.now().toString(36).slice(-8)}`;
+}
 
 describe('Auth login & register (e2e)', () => {
   let app: INestApplication;
@@ -14,20 +20,23 @@ describe('Auth login & register (e2e)', () => {
     await app.close();
   });
 
-  it('POST /api/auth/register creates student and returns token', async () => {
-    const email = `student-${Date.now()}@test.school`;
+  it('POST /api/auth/register creates student with username and returns token', async () => {
+    const username = uniqueUsername('stu');
+    const parentEmail = `parent-of-${Date.now()}@test.school`;
 
     const res = await request(app.getHttpServer())
       .post('/api/auth/register')
       .send({
-        email,
+        username,
         password: 'password123',
         firstName: 'New',
         lastName: 'Student',
         role: 'STUDENT',
+        schoolId: SCHOOL_ID,
+        parentEmail,
         board: 'CBSE',
         grade: 'Class 8',
-        subject: 'Science',
+        section: 'A',
       })
       .expect(201);
 
@@ -38,31 +47,88 @@ describe('Auth login & register (e2e)', () => {
       .set('Authorization', `Bearer ${res.body.accessToken}`)
       .expect(200);
 
-    expect(me.body.email).toBe(email);
+    expect(me.body.email).toBe(buildStudentLoginEmail(username, 'test-school'));
     expect(me.body.role).toBe('STUDENT');
   });
 
-  it('POST /api/auth/login authenticates registered user', async () => {
-    const email = `login-${Date.now()}@test.school`;
+  it('GET /api/auth/register/check-username reports availability', async () => {
+    const username = uniqueUsername('avail');
+
+    await request(app.getHttpServer())
+      .get('/api/auth/register/check-username')
+      .query({ schoolId: SCHOOL_ID, username })
+      .expect(200)
+      .expect({ available: true, username });
+
+    await request(app.getHttpServer())
+      .post('/api/auth/register')
+      .send({
+        username,
+        password: 'password123',
+        firstName: 'Taken',
+        lastName: 'User',
+        role: 'STUDENT',
+        schoolId: SCHOOL_ID,
+        parentEmail: `parent-${Date.now()}@test.school`,
+        board: 'CBSE',
+        grade: 'Class 8',
+        section: 'A',
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .get('/api/auth/register/check-username')
+      .query({ schoolId: SCHOOL_ID, username })
+      .expect(200)
+      .expect({ available: false, username });
+  });
+
+  it('POST /api/auth/login authenticates parent by email and student by username', async () => {
+    const username = uniqueUsername('login');
+    const parentEmail = `login-parent-${Date.now()}@test.school`;
     const password = 'securepass99';
 
     await request(app.getHttpServer())
       .post('/api/auth/register')
       .send({
-        email,
+        username,
         password,
         firstName: 'Login',
-        lastName: 'Test',
-        role: 'PARENT',
+        lastName: 'Student',
+        role: 'STUDENT',
+        schoolId: SCHOOL_ID,
+        parentEmail,
+        board: 'CBSE',
+        grade: 'Class 8',
+        section: 'A',
       })
       .expect(201);
 
-    const login = await request(app.getHttpServer())
-      .post('/api/auth/login')
-      .send({ email, password })
+    await request(app.getHttpServer())
+      .post('/api/auth/register')
+      .send({
+        email: parentEmail,
+        password,
+        firstName: 'Login',
+        lastName: 'Parent',
+        role: 'PARENT',
+        schoolId: SCHOOL_ID,
+      })
       .expect(201);
 
-    expect(login.body.accessToken).toBeDefined();
+    const parentLogin = await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ identifier: parentEmail, password })
+      .expect(201);
+
+    expect(parentLogin.body.accessToken).toBeDefined();
+
+    const studentLogin = await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ identifier: username, password })
+      .expect(201);
+
+    expect(studentLogin.body.accessToken).toBeDefined();
   });
 
   it('POST /api/auth/dev/token issues teacher token for /api/me', async () => {
@@ -83,45 +149,65 @@ describe('Auth login & register (e2e)', () => {
   });
 
   it('POST /api/auth/login rejects wrong password', async () => {
-    const email = `bad-pass-${Date.now()}@test.school`;
+    const username = uniqueUsername('badpass');
+    const parentEmail = `bad-pass-parent-${Date.now()}@test.school`;
     const password = 'correctpassword1';
 
     await request(app.getHttpServer())
       .post('/api/auth/register')
       .send({
-        email,
+        username,
+        password,
+        firstName: 'Bad',
+        lastName: 'Student',
+        role: 'STUDENT',
+        schoolId: SCHOOL_ID,
+        parentEmail,
+        board: 'CBSE',
+        grade: 'Class 8',
+        section: 'A',
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post('/api/auth/register')
+      .send({
+        email: parentEmail,
         password,
         firstName: 'Bad',
         lastName: 'Pass',
         role: 'PARENT',
+        schoolId: SCHOOL_ID,
       })
       .expect(201);
 
     await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ email, password: 'wrongpassword1' })
+      .send({ identifier: parentEmail, password: 'wrongpassword1' })
       .expect(401);
   });
 
-  it('POST /api/auth/login rejects unknown email', async () => {
+  it('POST /api/auth/login rejects unknown identifier', async () => {
     await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ email: `nobody-${Date.now()}@test.school`, password: 'password123' })
+      .send({ identifier: `nobody-${Date.now()}@test.school`, password: 'password123' })
       .expect(401);
   });
 
-  it('POST /api/auth/register rejects invalid email format', async () => {
+  it('POST /api/auth/register rejects invalid student username format', async () => {
     await request(app.getHttpServer())
       .post('/api/auth/register')
       .send({
-        email: 'not-an-email',
+        username: 'bad username!',
         password: 'password123',
         firstName: 'Bad',
-        lastName: 'Email',
+        lastName: 'User',
         role: 'STUDENT',
+        schoolId: SCHOOL_ID,
+        parentEmail: 'parent@test.school',
         board: 'CBSE',
         grade: 'Class 8',
-        subject: 'Science',
+        section: 'A',
       })
       .expect(400);
   });
@@ -135,6 +221,7 @@ describe('Auth login & register (e2e)', () => {
         firstName: 'Short',
         lastName: 'Pass',
         role: 'PARENT',
+        schoolId: SCHOOL_ID,
       })
       .expect(400);
   });

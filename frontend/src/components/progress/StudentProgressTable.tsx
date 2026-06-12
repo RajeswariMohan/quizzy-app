@@ -1,8 +1,10 @@
 import { Link } from 'react-router-dom';
-import { ArrowDown, ArrowUp, ChevronRight, TrendingUp } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronRight, Search, TrendingUp } from 'lucide-react';
+import { AcademicGroupFilterFields } from '@/components/academics/AcademicGroupFilterFields';
 import { Badge } from '@/components/ui/Badge';
 import { FieldSelect } from '@/components/ui/FieldSelect';
 import type { StudentProgressRow } from '@/api/progress.api';
+import type { AcademicGroupFilterValues } from '@/utils/gradeStructure';
 import { formatActiveTime, formatDateTime } from '@/lib/formatDateTime';
 import {
   resolveStudentProgressStatus,
@@ -87,6 +89,18 @@ function StatusBadge({ row }: { row: StudentProgressRow }) {
   return <Badge className={className}>{label}</Badge>;
 }
 
+export interface StudentProgressDirectoryFilters {
+  search: string;
+  onSearchChange: (value: string) => void;
+  filterGrade: string;
+  onFilterGradeChange: (grade: string) => void;
+  filterAcademicGroup: AcademicGroupFilterValues;
+  onFilterAcademicGroupChange: (values: AcademicGroupFilterValues) => void;
+  gradeOptions: string[];
+  gradeSections: Record<string, string[]>;
+  hasActiveServerFilters: boolean;
+}
+
 interface StudentProgressTableProps {
   items: StudentProgressRow[];
   totalCount: number;
@@ -96,6 +110,7 @@ interface StudentProgressTableProps {
   sortBy: StudentProgressSort;
   onStatusFilterChange: (value: StudentProgressStatusFilter) => void;
   onSortChange: (value: StudentProgressSort) => void;
+  directoryFilters?: StudentProgressDirectoryFilters;
 }
 
 export function StudentProgressTable({
@@ -107,6 +122,7 @@ export function StudentProgressTable({
   sortBy,
   onStatusFilterChange,
   onSortChange,
+  directoryFilters,
 }: StudentProgressTableProps) {
   const colSpan = isParent ? 8 : 10;
   const accuracySortActive = sortBy === 'accuracy_desc' || sortBy === 'accuracy_asc';
@@ -121,10 +137,48 @@ export function StudentProgressTable({
           <p className="text-sm font-medium text-ink">Students</p>
           <p className="text-xs text-muted">
             {items.length} of {totalCount} students
+            {directoryFilters?.hasActiveServerFilters ? ' · directory filters active' : ''}
             {statusFilter !== 'all' ? ' · filtered by status' : ''}
           </p>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap items-end gap-3">
+          {directoryFilters && (
+            <>
+              <div className="min-w-[140px] flex-1 sm:max-w-xs">
+                <label className="mb-1 block text-sm font-medium text-ink">Search</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                  <input
+                    type="search"
+                    placeholder="Name or email"
+                    className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-primary"
+                    value={directoryFilters.search}
+                    onChange={(e) => directoryFilters.onSearchChange(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="min-w-[120px]">
+                <FieldSelect
+                  label="Grade"
+                  value={directoryFilters.filterGrade || 'All'}
+                  onChange={(g) =>
+                    directoryFilters.onFilterGradeChange(g === 'All' ? '' : g)
+                  }
+                  options={['All', ...directoryFilters.gradeOptions]}
+                />
+              </div>
+              {directoryFilters.filterGrade && (
+                <div className="min-w-[200px] flex-1 sm:max-w-sm">
+                  <AcademicGroupFilterFields
+                    grade={directoryFilters.filterGrade}
+                    gradeSections={directoryFilters.gradeSections}
+                    values={directoryFilters.filterAcademicGroup}
+                    onChange={directoryFilters.onFilterAcademicGroupChange}
+                  />
+                </div>
+              )}
+            </>
+          )}
           <FieldSelect
             label="Status"
             value={statusFilterToLabel(statusFilter)}
@@ -242,7 +296,7 @@ export function StudentProgressTable({
           </tbody>
         </table>
       </div>
-      {pagination.showPagination && !isLoading && (
+      {!isLoading && pagination.totalItems > 0 && (
         <TablePagination
           page={pagination.page}
           totalPages={pagination.totalPages}

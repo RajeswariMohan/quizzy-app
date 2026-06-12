@@ -30,9 +30,7 @@ function buildTenantProfile(user: AuthUser, me?: MeResponse): TenantProfile {
   const schoolId = user.schoolId ?? null;
   return {
     schoolId,
-    schoolName:
-      me?.schoolName ??
-      (schoolId ? 'Your School' : user.role === 'SUPER_ADMIN' ? 'Test School (admin view)' : 'Quizzy Platform'),
+    schoolName: me?.schoolName ?? (schoolId ? 'Your School' : 'Quizzy Platform'),
     logoUrl: null,
     primaryColor: me?.primaryColor ?? '#5D5FEF',
     secondaryColor: me?.secondaryColor ?? '#7C3AED',
@@ -48,7 +46,7 @@ interface AuthState {
   error: string | null;
   initialize: () => Promise<void>;
   completeSession: (accessToken: string) => Promise<void>;
-  loginWithCredentials: (email: string, password: string) => Promise<void>;
+  loginWithCredentials: (identifier: string, password: string) => Promise<void>;
   register: (payload: RegisterPayload) => Promise<void>;
   loginWithToken: (token: string) => Promise<void>;
   loginWithDevRole: (role: DevSeedRole) => Promise<void>;
@@ -105,10 +103,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
   },
 
-  loginWithCredentials: async (email, password) => {
+  loginWithCredentials: async (identifier, password) => {
     set({ isLoading: true, error: null });
     try {
-      const { accessToken } = await loginWithPassword(email, password);
+      const { accessToken } = await loginWithPassword(identifier, password);
       await get().completeSession(accessToken);
       set({ isLoading: false });
     } catch (error) {
@@ -116,7 +114,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       setAccessToken(null);
       set({
         isLoading: false,
-        error: getApiErrorMessage(error, 'Invalid email or password.'),
+        error: getApiErrorMessage(error, 'Invalid username/email or password.'),
         isAuthenticated: false,
       });
     }
