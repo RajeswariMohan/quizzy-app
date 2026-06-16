@@ -104,6 +104,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   loginWithCredentials: async (identifier, password) => {
+    setAccessToken(null);
     set({ isLoading: true, error: null });
     try {
       const { accessToken } = await loginWithPassword(identifier, password);

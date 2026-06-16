@@ -257,6 +257,7 @@ export function ProfilePage() {
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="How your name appears in the app"
+              data-testid="profile-display-name"
             />
           </div>
           <div>
@@ -288,7 +289,7 @@ export function ProfilePage() {
             />
           )}
 
-          <Button type="submit" disabled={isSavingProfile}>
+          <Button type="submit" disabled={isSavingProfile} data-testid="profile-save">
             <Save className="h-4 w-4" />
             {isSavingProfile ? 'Saving…' : 'Save profile'}
           </Button>

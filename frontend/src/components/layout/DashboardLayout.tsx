@@ -26,6 +26,11 @@ import { useSchoolFeatures } from '@/hooks/useSchoolFeatures';
 import type { UserRole } from '@/types/auth';
 import { roleHome } from '@/utils/roleHome';
 
+function navTestId(to: string): string {
+  const slug = to.replace(/^\//, '').replace(/\//g, '-');
+  return `nav-${slug}`;
+}
+
 interface NavItem {
   to: string;
   label: string;
@@ -175,6 +180,7 @@ export function DashboardLayout() {
               key={to}
               to={to}
               end={end}
+              data-testid={navTestId(to)}
               className={({ isActive }) =>
                 cn(
                   'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition',
@@ -201,6 +207,7 @@ export function DashboardLayout() {
           <button
             type="button"
             onClick={handleLogout}
+            data-testid="logout-button"
             className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-white/70 hover:bg-white/10"
           >
             <LogOut className="h-5 w-5" />
@@ -229,6 +236,7 @@ export function DashboardLayout() {
                   key={to}
                   to={to}
                   end={end}
+                  data-testid={navTestId(to)}
                   onClick={() => setMobileOpen(false)}
                   className={({ isActive }) =>
                     cn(
@@ -351,6 +359,7 @@ export function DashboardLayout() {
                     <button
                       type="button"
                       className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm text-danger hover:bg-danger/10"
+                      data-testid="logout-button"
                       onClick={() => {
                         setProfileMenuOpen(false);
                         void handleLogout();

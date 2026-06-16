@@ -22,6 +22,7 @@ import { useNotificationStore } from '@/store/notificationStore';
 import { useAuthStore } from '@/store/authStore';
 import { useSchoolAcademics } from '@/hooks/useSchoolAcademics';
 import { PageWithScrollBelowFilter } from '@/components/layout/PageWithScrollBelowFilter';
+import { SuperAdminSchoolFilter } from '@/components/admin/SuperAdminSchoolFilter';
 import { QuizListFilterBar } from '@/components/quiz/QuizListFilterBar';
 import { TablePagination } from '@/components/ui/TablePagination';
 import { useClientPagination } from '@/hooks/useClientPagination';
@@ -227,10 +228,13 @@ export function TeacherQuizzesPage() {
                     : 'Only quizzes you created — use the filters to narrow results'}
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={loadQuizzes} disabled={isLoading}>
+            <div className="flex flex-wrap items-center gap-2">
+              {isSuperAdmin && <SuperAdminSchoolFilter />}
+              <Button variant="outline" size="sm" onClick={loadQuizzes} disabled={isLoading}>
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
+            </div>
           </div>
         }
         filter={
@@ -244,7 +248,7 @@ export function TeacherQuizzesPage() {
           />
         }
       >
-        <Card className="border-primary/20 bg-primary/5">
+        <Card className="border-primary/20 bg-primary/5" data-testid="create-quiz-button">
         <CardTitle className="flex items-center gap-2 text-base">
           <Sparkles className="h-4 w-4 text-primary" />
           Create new quiz
@@ -292,6 +296,7 @@ export function TeacherQuizzesPage() {
 
         {!isLoading && filtered.length > 0 && (
           <div
+            data-testid="teacher-quiz-list"
             className={`relative mt-4 space-y-3 transition-opacity ${isRefreshing ? 'pointer-events-none opacity-50' : ''}`}
           >
             {isRefreshing && (

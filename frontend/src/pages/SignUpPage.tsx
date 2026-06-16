@@ -128,9 +128,10 @@ export function SignUpPage() {
         setSchools(data.schools);
         setOtherSchoolId(data.otherSchoolId);
         const names = uniqueRegisterSchoolNames(data.schools);
-        const initialName = names[0] ?? '';
+        const initialName =
+          names[0] ?? (data.otherSchoolId ? OTHER_SCHOOL_VALUE : '');
         setSchoolName(initialName);
-        if (initialName) {
+        if (initialName && initialName !== OTHER_SCHOOL_VALUE) {
           const boards = boardsForRegisterSchoolName(data.schools, initialName);
           setSelectedBoard(boards[0] ?? '');
         } else {
@@ -268,6 +269,12 @@ export function SignUpPage() {
   const handleAccountNext = (e: React.FormEvent) => {
     e.preventDefault();
     if (role === 'STUDENT') {
+      if (requiresSchool && !schoolId) {
+        return;
+      }
+      if (isOtherSchool && !signupSchoolNote.trim()) {
+        return;
+      }
       const formatError = validateUsername(username);
       if (formatError) {
         setUsernameError(formatError);
@@ -298,9 +305,7 @@ export function SignUpPage() {
             grade,
             section: resolvedEnrollmentSection,
             parentEmail: parentEmail.trim(),
-            ...(isOtherSchool && signupSchoolNote.trim()
-              ? { signupSchoolNote: signupSchoolNote.trim() }
-              : {}),
+            ...(isOtherSchool ? { signupSchoolNote: signupSchoolNote.trim() } : {}),
           }
         : {}),
     });
@@ -375,8 +380,9 @@ export function SignUpPage() {
                     ))}
                   </select>
                   <p className="mt-1 text-xs text-muted">
-                    Onboarded schools only. Same name listed once — pick your board below if your
-                    school offers more than one.
+                    {schoolNameOptions.length === 0
+                      ? 'No schools are onboarded yet. Choose “My school is not listed” and tell us your school name and address below.'
+                      : 'Onboarded schools only. Same name listed once — pick your board below if your school offers more than one.'}
                   </p>
                 </div>
                 {!isOtherSchool && schoolName && boardOptions.length > 0 && (

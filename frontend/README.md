@@ -23,6 +23,18 @@ npm run dev
 
 Ensure the NestJS API runs on port 3000 (Vite proxies `/api`).
 
+## Deploy on Vercel
+
+1. Push this repo to GitHub (already configured as `origin`).
+2. Go to [vercel.com/new](https://vercel.com/new) → **Import Git Repository** → select `quizzy-app`.
+3. Set **Root Directory** to `frontend` (monorepo).
+4. Vercel auto-detects **Vite**; `frontend/vercel.json` configures the SPA build.
+5. Add **Environment Variable** (required for production):
+   - `VITE_API_BASE_URL` = `https://your-backend-url/api` (your deployed NestJS API)
+6. Deploy.
+
+The backend must allow your Vercel domain in CORS (`FRONTEND_ORIGIN` in `backend/.env`).
+
 ## Sign in (dev)
 
 1. Issue a token from the backend test teacher user.

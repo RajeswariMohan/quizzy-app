@@ -82,10 +82,11 @@ export function StudentQuizzesPanel() {
       )}
 
       {!isLoading && !error && quizzes.length > 0 && (
-        <ul className="mt-4 space-y-3">
+        <ul className="mt-4 space-y-3" data-testid="student-quiz-list">
           {quizzes.map((q) => (
             <li
               key={q.id}
+              data-testid={`student-quiz-item-${q.id}`}
               className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-100 px-4 py-3"
             >
               <div className="min-w-0">
@@ -98,7 +99,11 @@ export function StudentQuizzesPanel() {
                 </p>
               </div>
               <Link to={`/student/quizzes/${q.id}`}>
-                <Button size="sm" variant={q.isComplete ? 'outline' : 'primary'}>
+                <Button
+                  size="sm"
+                  variant={q.isComplete ? 'outline' : 'primary'}
+                  data-testid={`student-quiz-start-${q.id}`}
+                >
                   <Play className="h-4 w-4" />
                   {q.isComplete ? 'Review' : 'Start'}
                 </Button>

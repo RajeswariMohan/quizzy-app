@@ -14,6 +14,7 @@ describe('TenantContextService', () => {
   let findUser: jest.Mock;
   let findSchool: jest.Mock;
   let findSchools: jest.Mock;
+  let configGet: jest.Mock;
 
   const activeSchool: Partial<School> = {
     id: SCHOOL_ID,
@@ -33,6 +34,9 @@ describe('TenantContextService', () => {
     findUser = jest.fn();
     findSchool = jest.fn().mockResolvedValue(activeSchool);
     findSchools = jest.fn().mockResolvedValue([{ id: SCHOOL_ID }]);
+    configGet = jest.fn((key: string) =>
+      key === 'DEFAULT_SCHOOL_ID' ? SCHOOL_ID : undefined,
+    );
 
     const module = await Test.createTestingModule({
       providers: [
@@ -48,9 +52,7 @@ describe('TenantContextService', () => {
         {
           provide: ConfigService,
           useValue: {
-            get: jest.fn((key: string) =>
-              key === 'DEFAULT_SCHOOL_ID' ? SCHOOL_ID : undefined,
-            ),
+            get: configGet,
           },
         },
       ],
@@ -151,5 +153,17 @@ describe('TenantContextService', () => {
 
     const enriched = await service.applySuperAdminScope(context, 'all');
     expect(enriched.querySchoolIds).toEqual([SCHOOL_ID]);
+  });
+
+  it('falls back to active schools when DEFAULT_SCHOOL_ID is stale', async () => {
+    configGet.mockImplementation((key: string) =>
+      key === 'DEFAULT_SCHOOL_ID' ? '11111111-1111-1111-1111-111111111111' : undefined,
+    );
+    findSchools
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: '77777777-7777-7777-7777-777777777777' }]);
+
+    const ids = await service.resolveSuperAdminSchoolIds();
+    expect(ids).toEqual(['77777777-7777-7777-7777-777777777777']);
   });
 });

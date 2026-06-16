@@ -18,6 +18,7 @@ import { FeedbackModule } from './feedback/feedback.module';
 import { DataTransferModule } from './data-transfer/data-transfer.module';
 import { ProfileModule } from './profile/profile.module';
 import { AppController } from './app.controller';
+import { getPostgresConnectionOptions } from './config/env.config';
 
 @Module({
   imports: [
@@ -30,12 +31,7 @@ import { AppController } from './app.controller';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        host: configService.get<string>('DATABASE_HOST', 'localhost'),
-        port: Number(configService.get<string>('DATABASE_PORT', '5432')),
-        username: configService.get<string>('DATABASE_USER', 'quizzy'),
-        password: configService.get<string>('DATABASE_PASSWORD', 'quizzy'),
-        database: configService.get<string>('DATABASE_NAME', 'quizzy'),
+        ...getPostgresConnectionOptions(configService),
         entities: [...QUIZZY_ENTITIES],
         synchronize: false,
         autoLoadEntities: true,

@@ -64,6 +64,7 @@ export function DevLoginPage() {
               variant="outline"
               className="text-sm"
               disabled={isLoading}
+              data-testid={`dev-login-${role}`}
               onClick={() => void handleQuickLogin(role)}
             >
               {label}

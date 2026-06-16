@@ -6,6 +6,7 @@ import { PasswordInput } from '@/components/ui/PasswordInput';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { useAuthStore } from '@/store/authStore';
 import { roleHome } from '@/utils/roleHome';
+
 export function LoginPage() {
   const navigate = useNavigate();
   const { loginWithCredentials, isLoading, error } = useAuthStore();
@@ -33,7 +34,7 @@ export function LoginPage() {
       <h1 className="text-2xl font-bold text-ink">Welcome back</h1>
       <p className="mt-1 text-sm text-muted">Sign in to continue learning</p>
 
-      <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+      <form onSubmit={handleSubmit} className="mt-8 space-y-4" data-testid="login-form">
         <div>
           <label htmlFor="login-identifier" className="mb-1 block text-sm font-medium text-ink">
             Email or username
@@ -70,7 +71,7 @@ export function LoginPage() {
           </p>
         )}
 
-        <Button type="submit" className="w-full py-3" disabled={isLoading}>
+        <Button type="submit" className="w-full py-3" disabled={isLoading} data-testid="login-submit">
           {isLoading ? 'Signing in…' : 'Sign in'}
         </Button>
       </form>

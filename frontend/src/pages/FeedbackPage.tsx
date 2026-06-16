@@ -97,7 +97,7 @@ export function FeedbackPage() {
           <MessageSquare className="h-5 w-5 text-primary" />
           Submit feedback
         </CardTitle>
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+        <form onSubmit={handleSubmit} className="mt-4 space-y-4" data-testid="feedback-form">
           <div>
             <label className="mb-1 block text-sm font-medium text-ink">Category</label>
             <select
@@ -144,6 +144,7 @@ export function FeedbackPage() {
               required
               minLength={10}
               rows={5}
+              data-testid="feedback-message"
               className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-primary"
               placeholder="What went well? What was confusing or frustrating?"
               value={message}
@@ -152,9 +153,13 @@ export function FeedbackPage() {
           </div>
 
           {error && <p className="text-sm text-danger">{error}</p>}
-          {success && <p className="text-sm text-success">{success}</p>}
+          {success && (
+            <p className="text-sm text-success" data-testid="feedback-success">
+              {success}
+            </p>
+          )}
 
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" disabled={isSubmitting} data-testid="feedback-submit">
             {isSubmitting ? 'Sending…' : 'Send feedback'}
           </Button>
         </form>

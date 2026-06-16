@@ -20,7 +20,8 @@
     "db:migrate:feedback": "bash scripts/apply-migration-008.sh",
     "db:migrate:subjects": "bash scripts/apply-migration-009.sh",
     "db:migrate:passwords": "bash scripts/apply-migration-010.sh",
-    "db:migrate:audience": "bash scripts/apply-migration-011.sh"
+    "db:migrate:audience": "bash scripts/apply-migration-011.sh",
+    "db:migrate:all": "bash scripts/db-migrate-all.sh"
   },
   "dependencies": {
     "@nestjs/bullmq": "^11.0.0",

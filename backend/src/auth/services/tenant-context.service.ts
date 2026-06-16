@@ -125,10 +125,22 @@ export class TenantContextService {
       headerSchoolId?.trim() ||
       this.configService.get<string>('DEFAULT_SCHOOL_ID')?.trim();
     if (single) {
-      return this.validateActiveSchoolIds([single]);
+      const validated = await this.tryValidateActiveSchoolIds([single]);
+      if (validated) {
+        return validated;
+      }
     }
 
     return this.loadAllActiveSchoolIds();
+  }
+
+  /** Returns IDs when all are active; null when any ID is missing/inactive. */
+  private async tryValidateActiveSchoolIds(ids: string[]): Promise<string[] | null> {
+    try {
+      return await this.validateActiveSchoolIds(ids);
+    } catch {
+      return null;
+    }
   }
 
   private async loadAllActiveSchoolIds(): Promise<string[]> {

@@ -48,7 +48,7 @@ export function SuperAdminSchoolFilter() {
   const selectedCount = mode === 'selected' ? selectedSchoolIds.length : schools.length;
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative" data-testid="school-filter">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

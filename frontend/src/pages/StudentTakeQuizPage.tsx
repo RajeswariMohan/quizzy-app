@@ -186,7 +186,9 @@ export function StudentTakeQuizPage() {
           <span className="text-sm font-medium text-primary">{question.points} XP</span>
         </div>
 
-        <p className="mt-6 text-lg font-medium text-ink">{question.questionText}</p>
+        <p className="mt-6 text-lg font-medium text-ink" data-testid="quiz-question">
+          {question.questionText}
+        </p>
 
         {!isLocked && (
           <p className="mt-3 text-sm text-muted">Choose an option, then submit your answer.</p>
@@ -202,6 +204,7 @@ export function StudentTakeQuizPage() {
               <button
                 key={idx}
                 type="button"
+                data-testid={`quiz-option-${idx}`}
                 disabled={isSubmitting || isLocked}
                 onClick={() => handleSelect(idx)}
                 className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm transition ${
@@ -246,6 +249,7 @@ export function StudentTakeQuizPage() {
               type="button"
               onClick={handleSubmit}
               disabled={isSubmitting}
+              data-testid="quiz-submit-answer"
               className="w-full sm:w-auto"
             >
               {isSubmitting ? 'Submitting…' : 'Submit answer'}
@@ -255,6 +259,7 @@ export function StudentTakeQuizPage() {
 
         {displayFeedback && (
           <div
+            data-testid="quiz-feedback"
             className={`mt-4 flex items-start gap-2 rounded-xl p-3 text-sm ${
               displayFeedback.isCorrect ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'
             }`}
@@ -290,7 +295,7 @@ export function StudentTakeQuizPage() {
           ) : (
             <span />
           )}
-          <Button onClick={goNext} disabled={!isSubmitted}>
+          <Button onClick={goNext} disabled={!isSubmitted} data-testid="quiz-next">
             {activeIndex < quiz.questions.length - 1 ? 'Next question' : 'Finish quiz'}
           </Button>
         </div>
