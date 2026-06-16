@@ -1,0 +1,43 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Deploy: Dashboard → New → Blueprint → connect quizzy-app repo
+#
+# Postgres: use Neon (set DATABASE_URL + DATABASE_URL_DIRECT in Dashboard).
+# Redis: Render Key Value below (internal network).
+
+services:
+  - type: web
+    name: quizzy-api
+    runtime: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm ci && npm run build
+    # Paid plans only — or run once locally: npm run db:migrate:node
+    # preDeployCommand: npm run db:migrate:node
+    startCommand: npm run start:prod
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_URL_DIRECT
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 1d
+      - key: UNLISTED_SCHOOL_ID
+        value: 77777777-7777-7777-7777-777777777777
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: quizzy-redis
+          property: connectionString
+
+  - type: keyvalue
+    name: quizzy-redis
+    plan: free
+    ipAllowList: []
+    maxmemoryPolicy: allkeys-lru

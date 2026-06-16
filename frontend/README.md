@@ -33,7 +33,15 @@ Ensure the NestJS API runs on port 3000 (Vite proxies `/api`).
    - `VITE_API_BASE_URL` = `https://your-backend-url/api` (your deployed NestJS API)
 6. Deploy.
 
-The backend must allow your Vercel domain in CORS (`FRONTEND_ORIGIN` in `backend/.env`).
+The backend must allow your Vercel domain in CORS — set `FRONTEND_ORIGIN` on **Render** (see [`backend/RENDER.md`](../backend/RENDER.md)).
+
+## Deploy API on Render
+
+See [`backend/RENDER.md`](../backend/RENDER.md). After deploy, set on Vercel:
+
+```env
+VITE_API_BASE_URL=https://quizzy-api.onrender.com/api
+```
 
 ## Sign in (dev)
 

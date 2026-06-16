@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "description": "Quizzy multi-tenant quiz portal API",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "nest build",
     "start": "nest start",
@@ -21,7 +24,8 @@
     "db:migrate:subjects": "bash scripts/apply-migration-009.sh",
     "db:migrate:passwords": "bash scripts/apply-migration-010.sh",
     "db:migrate:audience": "bash scripts/apply-migration-011.sh",
-    "db:migrate:all": "bash scripts/db-migrate-all.sh"
+    "db:migrate:all": "bash scripts/db-migrate-all.sh",
+    "db:migrate:node": "node scripts/migrate-node.mjs"
   },
   "dependencies": {
     "@nestjs/bullmq": "^11.0.0",
