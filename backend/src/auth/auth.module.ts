@@ -8,6 +8,7 @@ import { School } from '@database/entities/school.entity';
 import { UserSession } from '@database/entities/user-session.entity';
 import { User } from '@database/entities/user.entity';
 import { AuthController } from './auth.controller';
+import { TeacherSignupApprovalController } from './signup-approval.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { PermissionsGuard } from './guards/permissions.guard';
@@ -17,6 +18,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { PasswordService } from './services/password.service';
 import { TenantContextService } from './services/tenant-context.service';
 import { SessionService } from './services/session.service';
+import { SignupApprovalService } from './services/signup-approval.service';
 import { TokenService } from './services/token.service';
 import { ParentStudentLinkModule } from '../parent/parent-student-link.module';
 import { SchoolsModule } from '../school/schools.module';
@@ -45,9 +47,10 @@ import { getJwtExpiresIn, getJwtSecret } from '../config/env.config';
     ParentStudentLinkModule,
     SchoolsModule,
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, TeacherSignupApprovalController],
   providers: [
     AuthService,
+    SignupApprovalService,
     PasswordService,
     TokenService,
     SessionService,
@@ -78,11 +81,15 @@ export class AuthModule implements NestModule {
         { path: 'auth/register', method: RequestMethod.POST },
         { path: 'auth/register-academics', method: RequestMethod.GET },
         { path: 'auth/register-schools', method: RequestMethod.GET },
+        { path: 'auth/register-school/:slug', method: RequestMethod.GET },
+        { path: 'auth/register/check-username', method: RequestMethod.GET },
         { path: 'auth/dev/token', method: RequestMethod.POST },
         { path: 'api/auth/login', method: RequestMethod.POST },
         { path: 'api/auth/register', method: RequestMethod.POST },
         { path: 'api/auth/register-academics', method: RequestMethod.GET },
         { path: 'api/auth/register-schools', method: RequestMethod.GET },
+        { path: 'api/auth/register-school/:slug', method: RequestMethod.GET },
+        { path: 'api/auth/register/check-username', method: RequestMethod.GET },
         { path: 'api/auth/dev/token', method: RequestMethod.POST },
       )
       .forRoutes({ path: '{*path}', method: RequestMethod.ALL });

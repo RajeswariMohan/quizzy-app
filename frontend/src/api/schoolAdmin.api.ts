@@ -20,7 +20,7 @@ export interface SchoolAdminOverview {
   avgAccuracy: number;
 }
 
-export type SchoolUserStatusFilter = 'active' | 'inactive' | 'all';
+export type SchoolUserStatusFilter = 'active' | 'inactive' | 'pending' | 'all';
 
 export interface SchoolUserRow {
   id: string;
@@ -34,6 +34,7 @@ export interface SchoolUserRow {
   parentEmail: string | null;
   signupSchoolNote: string | null;
   isActive: boolean;
+  signupPendingAt: string | null;
   createdAt: string;
 }
 

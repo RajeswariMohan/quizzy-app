@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { PasswordInput } from '@/components/ui/PasswordInput';
@@ -9,8 +9,15 @@ import { SchoolUserRoleButtons } from '@/components/school-admin/SchoolUserRoleB
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { fetchRegisterAcademicOptions } from '@/api/registerAcademics.api';
 import { fetchRegisterSchools, type RegisterSchoolOption } from '@/api/registerSchools.api';
-import { checkUsernameAvailability } from '@/api/auth.api';
-import { logApiError } from '@/api/client';
+import {
+  checkUsernameAvailability,
+  isRegisterPending,
+} from '@/api/auth.api';
+import {
+  fetchRegisterSchoolBySlug,
+  type RegisterSchoolBySlug,
+} from '@/api/registerSchoolBySlug.api';
+import { getApiErrorMessage, logApiError } from '@/api/client';
 import { useAuthStore } from '@/store/authStore';
 import { roleHome } from '@/utils/roleHome';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
@@ -38,8 +45,15 @@ const OTHER_SCHOOL_VALUE = '__other__';
 
 export function SignUpPage() {
   const navigate = useNavigate();
+  const { schoolSlug: joinSlugParam } = useParams<{ schoolSlug?: string }>();
+  const joinSlug = joinSlugParam?.trim().toLowerCase() ?? '';
+  const isJoinFlow = joinSlug.length > 0;
   const { register, isLoading, error } = useAuthStore();
   const [step, setStep] = useState<'account' | 'profile'>('account');
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
+  const [joinSchool, setJoinSchool] = useState<RegisterSchoolBySlug | null>(null);
+  const [joinSchoolError, setJoinSchoolError] = useState<string | null>(null);
+  const [joinSchoolLoading, setJoinSchoolLoading] = useState(isJoinFlow);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -66,7 +80,13 @@ export function SignUpPage() {
   const [parentPortalEnabled, setParentPortalEnabled] = useState(true);
 
   const isOtherSchool = Boolean(otherSchoolId && schoolName === OTHER_SCHOOL_VALUE);
-  const requiresSchool = role === 'STUDENT' || role === 'PARENT' || role === 'TEACHER';
+  const requiresSchool =
+    role === 'STUDENT' || role === 'PARENT' || (isJoinFlow && role === 'TEACHER');
+
+  const signupAllowedRoles = useMemo((): SignupRole[] => {
+    if (isJoinFlow) return ['STUDENT', 'TEACHER'];
+    return parentPortalEnabled ? ['STUDENT', 'PARENT'] : ['STUDENT'];
+  }, [isJoinFlow, parentPortalEnabled]);
 
   const schoolNameOptions = useMemo(
     () => uniqueRegisterSchoolNames(schools),
@@ -79,10 +99,20 @@ export function SignUpPage() {
   }, [schools, schoolName, isOtherSchool]);
 
   const schoolId = useMemo(() => {
+    if (isJoinFlow && joinSchool) return joinSchool.id;
     if (isOtherSchool) return otherSchoolId;
     if (!schoolName) return '';
     return resolveRegisterSchoolId(schools, schoolName, selectedBoard || null) ?? '';
-  }, [schools, schoolName, selectedBoard, isOtherSchool, otherSchoolId]);
+  }, [isJoinFlow, joinSchool, schools, schoolName, selectedBoard, isOtherSchool, otherSchoolId]);
+
+  const schoolSelectOptions = useMemo(() => {
+    if (isJoinFlow) return [];
+    if (role === 'STUDENT') {
+      if (!otherSchoolId) return [];
+      return [{ value: OTHER_SCHOOL_VALUE, label: 'My school is not listed' }];
+    }
+    return schoolNameOptions.map((name) => ({ value: name, label: name }));
+  }, [isJoinFlow, role, schoolNameOptions, otherSchoolId]);
 
   const resolvedEnrollmentSection = useMemo(() => {
     if (!grade) return '';
@@ -107,14 +137,6 @@ export function SignUpPage() {
     return Boolean(section);
   }, [grade, gradeSections, section, seniorDepartment, seniorSectionLetter]);
 
-  const schoolSelectOptions = useMemo(() => {
-    const options = schoolNameOptions.map((name) => ({ value: name, label: name }));
-    if (otherSchoolId) {
-      options.push({ value: OTHER_SCHOOL_VALUE, label: 'My school is not listed' });
-    }
-    return options;
-  }, [schoolNameOptions, otherSchoolId]);
-
   const effectiveBoard = useMemo(() => {
     if (isOtherSchool) return selectedBoard || null;
     if (selectedBoard) return selectedBoard;
@@ -123,13 +145,35 @@ export function SignUpPage() {
   }, [isOtherSchool, selectedBoard, schools, schoolId]);
 
   useEffect(() => {
+    if (!isJoinFlow) return;
+    setJoinSchoolLoading(true);
+    setJoinSchoolError(null);
+    fetchRegisterSchoolBySlug(joinSlug)
+      .then((school) => {
+        setJoinSchool(school);
+        setSchoolName(school.name);
+        if (school.board) setSelectedBoard(school.board);
+      })
+      .catch((err) => {
+        logApiError('Load join school failed', err);
+        setJoinSchoolError(getApiErrorMessage(err, 'This school join link is invalid or expired.'));
+      })
+      .finally(() => setJoinSchoolLoading(false));
+  }, [isJoinFlow, joinSlug]);
+
+  useEffect(() => {
+    if (isJoinFlow) return;
     fetchRegisterSchools()
       .then((data) => {
         setSchools(data.schools);
         setOtherSchoolId(data.otherSchoolId);
         const names = uniqueRegisterSchoolNames(data.schools);
         const initialName =
-          names[0] ?? (data.otherSchoolId ? OTHER_SCHOOL_VALUE : '');
+          role === 'STUDENT'
+            ? data.otherSchoolId
+              ? OTHER_SCHOOL_VALUE
+              : ''
+            : (names[0] ?? '');
         setSchoolName(initialName);
         if (initialName && initialName !== OTHER_SCHOOL_VALUE) {
           const boards = boardsForRegisterSchoolName(data.schools, initialName);
@@ -142,7 +186,7 @@ export function SignUpPage() {
         logApiError('Load register schools failed', err);
         setSchoolsError('Could not load schools. Please try again later.');
       });
-  }, []);
+  }, [isJoinFlow, role]);
 
   useEffect(() => {
     if (!schoolId || role === 'TEACHER') return;
@@ -182,10 +226,23 @@ export function SignUpPage() {
   }, [schoolName, schools]);
 
   useEffect(() => {
-    if (role === 'PARENT' && !parentPortalEnabled) {
-      setRole('STUDENT');
+    if (isJoinFlow) return;
+    if (role === 'STUDENT' && otherSchoolId) {
+      setSchoolName(OTHER_SCHOOL_VALUE);
+      setSelectedBoard('');
+      return;
     }
-  }, [role, parentPortalEnabled]);
+    if (role === 'PARENT') {
+      const names = uniqueRegisterSchoolNames(schools);
+      setSchoolName((prev) => (names.includes(prev) ? prev : (names[0] ?? '')));
+    }
+  }, [isJoinFlow, role, otherSchoolId, schools]);
+
+  useEffect(() => {
+    if (!signupAllowedRoles.includes(role)) {
+      setRole(signupAllowedRoles[0] ?? 'STUDENT');
+    }
+  }, [role, signupAllowedRoles]);
 
   useEffect(() => {
     if (!grade) {
@@ -290,7 +347,7 @@ export function SignUpPage() {
   };
 
   const submitRegistration = async () => {
-    await register({
+    const result = await register({
       ...(role === 'STUDENT'
         ? { username: username.trim() }
         : { email: email.trim() }),
@@ -298,7 +355,11 @@ export function SignUpPage() {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       role,
-      ...(requiresSchool && schoolId ? { schoolId } : {}),
+      ...(isJoinFlow && joinSchool
+        ? { schoolSlug: joinSchool.slug, schoolId: joinSchool.id }
+        : requiresSchool && schoolId
+          ? { schoolId }
+          : {}),
       ...(role === 'STUDENT'
         ? {
             ...(effectiveBoard ? { board: effectiveBoard } : {}),
@@ -309,11 +370,63 @@ export function SignUpPage() {
           }
         : {}),
     });
+    if (result && isRegisterPending(result)) {
+      setPendingMessage(result.message);
+      return;
+    }
     const state = useAuthStore.getState();
     if (state.isAuthenticated && state.user) {
       navigate(roleHome(state.user.role));
     }
   };
+
+  if (pendingMessage) {
+    return (
+      <PublicLayout narrow>
+        <div className="rounded-2xl border border-success/30 bg-success/5 px-5 py-6 text-center">
+          <h1 className="text-xl font-bold text-ink">Request submitted</h1>
+          <p className="mt-2 text-sm text-muted">{pendingMessage}</p>
+          <Link to="/login" className="mt-5 inline-block">
+            <Button className="px-6">Go to sign in</Button>
+          </Link>
+        </div>
+      </PublicLayout>
+    );
+  }
+
+  if (isJoinFlow && joinSchoolLoading) {
+    return (
+      <PublicLayout narrow>
+        <div className="flex min-h-[30vh] items-center justify-center">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        </div>
+      </PublicLayout>
+    );
+  }
+
+  if (isJoinFlow && (joinSchoolError || !joinSchool)) {
+    return (
+      <PublicLayout narrow>
+        <Link
+          to="/"
+          className="mb-6 inline-flex items-center gap-1 text-sm text-muted hover:text-ink"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden /> Back to home
+        </Link>
+        <h1 className="text-2xl font-bold text-ink">Invalid join link</h1>
+        <p className="mt-2 text-sm text-danger" role="alert">
+          {joinSchoolError ?? 'This school join link is invalid or expired.'}
+        </p>
+        <p className="mt-4 text-sm text-muted">
+          Ask your school for a new invite link, or{' '}
+          <Link to="/signup" className="font-medium text-primary hover:underline">
+            use the main signup page
+          </Link>{' '}
+          if your school is not listed yet.
+        </p>
+      </PublicLayout>
+    );
+  }
 
   return (
     <PublicLayout narrow>
@@ -326,8 +439,14 @@ export function SignUpPage() {
 
       {step === 'account' ? (
         <>
-          <h1 className="text-2xl font-bold text-ink">Create account</h1>
-          <p className="mt-1 text-sm text-muted">Join Quizzy to learn and track progress</p>
+          <h1 className="text-2xl font-bold text-ink">
+            {isJoinFlow ? `Join ${joinSchool?.name ?? 'school'}` : 'Create account'}
+          </h1>
+          <p className="mt-1 text-sm text-muted">
+            {isJoinFlow
+              ? 'Your account will be reviewed before you can sign in'
+              : 'Join Quizzy to learn and track progress'}
+          </p>
 
           <form onSubmit={handleAccountNext} className="mt-6 space-y-4">
             <div className="grid grid-cols-2 gap-3">
@@ -357,9 +476,22 @@ export function SignUpPage() {
               value={role}
               onChange={setRole}
               parentPortalEnabled={parentPortalEnabled}
+              allowedRoles={signupAllowedRoles}
             />
 
-            {requiresSchool && (
+            {isJoinFlow && joinSchool && (
+              <div>
+                <span className="mb-1 block text-sm font-medium text-ink">School</span>
+                <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-ink">
+                  {joinSchool.name}
+                  {joinSchool.board ? (
+                    <span className="text-muted"> · {joinSchool.board}</span>
+                  ) : null}
+                </div>
+              </div>
+            )}
+
+            {requiresSchool && !isJoinFlow && (
               <>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-ink">School</label>
@@ -380,9 +512,11 @@ export function SignUpPage() {
                     ))}
                   </select>
                   <p className="mt-1 text-xs text-muted">
-                    {schoolNameOptions.length === 0
-                      ? 'No schools are onboarded yet. Choose “My school is not listed” and tell us your school name and address below.'
-                      : 'Onboarded schools only. Same name listed once — pick your board below if your school offers more than one.'}
+                    {role === 'STUDENT'
+                      ? 'Student signup is for schools not yet on Quizzy. To join an onboarded school, use your school’s invite link.'
+                      : schoolNameOptions.length === 0
+                        ? 'No schools are onboarded yet.'
+                        : 'Select your child’s school. You can sign up after your child has registered with your email.'}
                   </p>
                 </div>
                 {!isOtherSchool && schoolName && boardOptions.length > 0 && (
@@ -534,7 +668,12 @@ export function SignUpPage() {
         <>
           <h1 className="text-2xl font-bold text-ink">Tell us about you</h1>
           <p className="mt-1 text-sm text-muted">
-            Select your grade and section at {schoolName === OTHER_SCHOOL_VALUE ? 'your school' : schoolName || 'school'}
+            Select your grade and section at{' '}
+            {isJoinFlow
+              ? (joinSchool?.name ?? 'school')
+              : schoolName === OTHER_SCHOOL_VALUE
+                ? 'your school'
+                : schoolName || 'school'}
           </p>
 
           <div className="mt-6 space-y-4">

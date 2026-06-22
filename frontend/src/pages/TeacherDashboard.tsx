@@ -1,32 +1,67 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart3, BookOpen, ChevronRight, RefreshCw } from 'lucide-react';
+import { BarChart3, BookOpen, ChevronRight, RefreshCw, UserCheck } from 'lucide-react';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { fetchTeacherDashboard, type TeacherDashboardData } from '@/api/dashboard.api';
-import { logApiError } from '@/api/client';
+import {
+  approvePendingSignup,
+  fetchPendingSignups,
+  type PendingSignupRow,
+} from '@/api/signupApproval.api';
+import { getApiErrorMessage, logApiError } from '@/api/client';
 import { useAuthStore } from '@/store/authStore';
 import { useSchoolFilterStore } from '@/store/schoolFilterStore';
 import { formatQuizActivityAt } from '@/utils/quizMeta';
 
 export function TeacherDashboard() {
   const [data, setData] = useState<TeacherDashboardData | null>(null);
+  const [pendingSignups, setPendingSignups] = useState<PendingSignupRow[]>([]);
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+  const [pendingError, setPendingError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const filterVersion = useSchoolFilterStore((s) => s.filterVersion);
   const filterLabel = useSchoolFilterStore((s) => s.getFilterLabel());
   const isSuperAdmin = useAuthStore((s) => s.user?.role === 'SUPER_ADMIN');
 
-  const loadDashboard = () => {
+  const loadDashboard = useCallback(() => {
     setIsLoading(true);
-    fetchTeacherDashboard()
-      .then(setData)
+    setPendingError(null);
+    Promise.all([
+      fetchTeacherDashboard(),
+      fetchPendingSignups().catch((err) => {
+        logApiError('Load pending signups failed', err);
+        return [] as PendingSignupRow[];
+      }),
+    ])
+      .then(([dashboard, pending]) => {
+        setData(dashboard);
+        setPendingSignups(pending);
+      })
       .catch((err) => logApiError('Load teacher dashboard failed', err))
       .finally(() => setIsLoading(false));
+  }, []);
+
+  const handleApprovePending = async (row: PendingSignupRow) => {
+    const name = `${row.firstName} ${row.lastName}`.trim();
+    if (!window.confirm(`Approve ${name}? They will be able to sign in.`)) return;
+    setPendingActionId(row.id);
+    setPendingError(null);
+    try {
+      await approvePendingSignup(row.id);
+      setPendingSignups((prev) => prev.filter((p) => p.id !== row.id));
+      loadDashboard();
+    } catch (err) {
+      logApiError('Approve pending signup failed', err);
+      setPendingError(getApiErrorMessage(err, 'Could not approve signup.'));
+    } finally {
+      setPendingActionId(null);
+    }
   };
 
   useEffect(() => {
     loadDashboard();
-  }, [filterVersion]);
+  }, [filterVersion, loadDashboard]);
 
   const stats = data
     ? [
@@ -68,6 +103,50 @@ export function TeacherDashboard() {
               </Card>
             ))}
           </div>
+
+          {pendingSignups.length > 0 && (
+            <Card>
+              <CardTitle>Pending student signups</CardTitle>
+              <p className="mt-1 text-sm text-muted">
+                Students who joined via your school link are waiting for approval.
+              </p>
+              {pendingError && (
+                <p className="mt-2 text-sm text-danger" role="alert">
+                  {pendingError}
+                </p>
+              )}
+              <ul className="mt-3 space-y-2 text-sm">
+                {pendingSignups.map((row) => {
+                  const busy = pendingActionId === row.id;
+                  const name = `${row.firstName} ${row.lastName}`.trim();
+                  return (
+                    <li
+                      key={row.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-surface px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium text-ink">{name}</p>
+                        <p className="text-xs text-muted">
+                          {row.username ?? row.email}
+                          {row.grade ? ` · ${row.grade}` : ''}
+                          {row.section ? ` ${row.section}` : ''}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => void handleApprovePending(row)}
+                      >
+                        <UserCheck className="h-3.5 w-3.5" />
+                        {busy ? 'Approving…' : 'Approve'}
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Link to="/teacher/quizzes">

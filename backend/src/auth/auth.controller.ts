@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   Get,
   NotFoundException,
+  Param,
   Post,
   Query,
   Req,
@@ -33,7 +34,7 @@ import {
 import { DevIssueTokenDto } from './dto/dev-issue-token.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
-import { AuthService, AuthTokensResponse } from './auth.service';
+import { AuthService, AuthTokensResponse, RegisterPendingResponse } from './auth.service';
 import { PasswordService } from './services/password.service';
 import { SessionService } from './services/session.service';
 import { TokenService } from './services/token.service';
@@ -62,6 +63,32 @@ export class AuthController {
   @Post('login')
   async login(@Body() dto: LoginDto, @Req() req: Request): Promise<AuthTokensResponse> {
     const identifier = dto.identifier.trim().toLowerCase();
+
+    const pendingQb = this.usersRepository
+      .createQueryBuilder('u')
+      .addSelect('u.passwordHash')
+      .where('u.signup_pending_at IS NOT NULL')
+      .andWhere('u.is_active = false');
+
+    if (identifier.includes('@')) {
+      pendingQb.andWhere('LOWER(u.email) = :identifier', { identifier });
+    } else {
+      pendingQb.andWhere('LOWER(u.username) = :identifier', { identifier });
+    }
+
+    const pendingMatches = await pendingQb.getMany();
+    if (pendingMatches.length === 1) {
+      const valid = await this.passwordService.verify(
+        dto.password,
+        pendingMatches[0].passwordHash,
+      );
+      if (valid) {
+        throw new UnauthorizedException(
+          'Your account is awaiting approval from your school. You will be able to sign in once approved.',
+        );
+      }
+    }
+
     const qb = this.usersRepository
       .createQueryBuilder('u')
       .addSelect('u.passwordHash')
@@ -119,6 +146,29 @@ export class AuthController {
     }
   }
 
+  /** Resolve a single onboarded school by slug (school join link). */
+  @Public()
+  @Get('register-school/:slug')
+  async registerSchoolBySlug(@Param('slug') slug: string) {
+    const normalized = slug.trim().toLowerCase();
+    if (!normalized || normalized === UNLISTED_SCHOOL_SLUG) {
+      throw new NotFoundException('School not found');
+    }
+    const school = await this.schoolsRepository.findOne({
+      where: { slug: normalized, isActive: true },
+      select: ['id', 'name', 'board', 'slug'],
+    });
+    if (!school) {
+      throw new NotFoundException('School not found');
+    }
+    return {
+      id: school.id,
+      name: school.name,
+      board: school.board,
+      slug: school.slug,
+    };
+  }
+
   /** Active onboarded schools for self-service signup (excludes unlisted tenant). */
   @Public()
   @Get('register-schools')
@@ -160,7 +210,10 @@ export class AuthController {
 
   @Public()
   @Post('register')
-  async register(@Body() dto: RegisterDto, @Req() req: Request): Promise<AuthTokensResponse> {
+  async register(
+    @Body() dto: RegisterDto,
+    @Req() req: Request,
+  ): Promise<AuthTokensResponse | RegisterPendingResponse> {
     this.validateRegisterFields(dto);
 
     const schoolId = await this.resolveSchoolId(dto.schoolId, dto.role);
@@ -170,6 +223,8 @@ export class AuthController {
             where: { id: schoolId, isActive: true },
           })
         : null;
+
+    const signupFlow = this.resolveSignupFlow(dto, schoolId, school);
 
     let email: string;
     let username: string | null = null;
@@ -244,12 +299,23 @@ export class AuthController {
       section: dto.role === UserRole.STUDENT ? dto.section?.trim() || null : null,
       parentEmail,
       signupSchoolNote: isUnlistedStudent ? dto.signupSchoolNote!.trim() : null,
-      isActive: true,
+      isActive: signupFlow !== 'pending',
+      signupPendingAt: signupFlow === 'pending' ? new Date() : null,
       xpPoints: 0,
       currentStreak: 0,
     });
 
     const saved = await this.usersRepository.save(user);
+
+    if (signupFlow === 'pending') {
+      return {
+        pendingApproval: true,
+        message:
+          dto.role === UserRole.TEACHER
+            ? 'Your teacher account request was submitted. A school administrator will review it soon.'
+            : 'Your student account request was submitted. A teacher at your school will review it soon.',
+      };
+    }
 
     if (saved.role === UserRole.PARENT && saved.schoolId) {
       await this.parentStudentLinkService.linkByParentEmail(
@@ -402,5 +468,44 @@ export class AuthController {
     await this.schoolLimitsService.assertCanAddUser(school.id, role);
 
     return school.id;
+  }
+
+  private resolveSignupFlow(
+    dto: RegisterDto,
+    schoolId: string | null,
+    school: School | null,
+  ): 'immediate' | 'pending' {
+    const unlistedId = this.resolveUnlistedSchoolId();
+    const schoolSlug = dto.schoolSlug?.trim().toLowerCase();
+
+    if (schoolSlug) {
+      if (dto.role === UserRole.PARENT) {
+        throw new ForbiddenException('Parents should use the main signup page');
+      }
+      if (!school || school.slug !== schoolSlug) {
+        throw new BadRequestException('School does not match the join link');
+      }
+      if (school.id === unlistedId) {
+        throw new BadRequestException('Invalid school join link');
+      }
+      if (dto.role !== UserRole.STUDENT && dto.role !== UserRole.TEACHER) {
+        throw new BadRequestException('Invalid role for school join');
+      }
+      return 'pending';
+    }
+
+    if (dto.role === UserRole.TEACHER) {
+      throw new ForbiddenException(
+        'Teacher accounts are created via your school invite link or by a school administrator.',
+      );
+    }
+
+    if (dto.role === UserRole.STUDENT && schoolId !== unlistedId) {
+      throw new ForbiddenException(
+        'To join an onboarded school, use the invite link from your school or ask your administrator to add you.',
+      );
+    }
+
+    return 'immediate';
   }
 }

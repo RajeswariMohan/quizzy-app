@@ -4,6 +4,7 @@ import { UserRole } from '@database/enums/user-role.enum';
 export enum SchoolUserStatusFilter {
   ACTIVE = 'active',
   INACTIVE = 'inactive',
+  PENDING = 'pending',
   ALL = 'all',
 }
 

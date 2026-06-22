@@ -2,7 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { buildStudentLoginEmail } from '../src/auth/constants/username.util';
 import { AuthService } from '../src/auth/auth.service';
-import { PARENT_ID, SCHOOL_ID, STUDENT_ID, UNLISTED_SCHOOL_ID } from './helpers/constants';
+import { PARENT_ID, SCHOOL_ID, STUDENT_ID, TEACHER_ID, UNLISTED_SCHOOL_ID } from './helpers/constants';
 import { createTestApp } from './helpers/create-test-app';
 
 function uniqueUsername(prefix: string): string {
@@ -71,16 +71,18 @@ describe('Parent–student linking (e2e)', () => {
   it('student registers with parentEmail then parent auto-links on register', async () => {
     const parentEmail = `parent-auto-${Date.now()}@test.school`;
     const username = uniqueUsername('auto');
+    const password = 'password123';
 
     await request(app.getHttpServer())
       .post('/api/auth/register')
       .send({
         username,
-        password: 'password123',
+        password,
         firstName: 'Auto',
         lastName: 'Student',
         role: 'STUDENT',
         schoolId: SCHOOL_ID,
+        schoolSlug: 'test-school',
         parentEmail,
         board: 'CBSE',
         grade: 'Class 8',
@@ -88,11 +90,27 @@ describe('Parent–student linking (e2e)', () => {
       })
       .expect(201);
 
+    const teacherToken = (await authService.issueTokensForUser(TEACHER_ID)).accessToken;
+    const pending = await request(app.getHttpServer())
+      .get('/api/teacher/pending-signups')
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .expect(200);
+
+    const row = (pending.body as { id: string; username: string }[]).find(
+      (p) => p.username === username,
+    );
+    expect(row).toBeDefined();
+
+    await request(app.getHttpServer())
+      .patch(`/api/teacher/pending-signups/${row!.id}/approve`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .expect(200);
+
     const register = await request(app.getHttpServer())
       .post('/api/auth/register')
       .send({
         email: parentEmail,
-        password: 'password123',
+        password,
         firstName: 'Auto',
         lastName: 'Parent',
         role: 'PARENT',
@@ -192,6 +210,7 @@ describe('Parent–student linking (e2e)', () => {
         lastName: 'Student',
         role: 'STUDENT',
         schoolId: UNLISTED_SCHOOL_ID,
+        signupSchoolNote: 'Example School, 123 Main St',
         parentEmail: `unlisted-parent-${Date.now()}@test.school`,
         board: 'CBSE',
         grade: 'Class 8',

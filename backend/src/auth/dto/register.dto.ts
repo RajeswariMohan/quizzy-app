@@ -70,4 +70,9 @@ export class RegisterDto {
   @IsOptional()
   @IsEmail()
   studentEmail?: string;
+
+  /** School join link slug — required to register at an onboarded school (pending approval). */
+  @IsOptional()
+  @IsString()
+  schoolSlug?: string;
 }

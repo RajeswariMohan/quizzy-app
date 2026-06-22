@@ -5,6 +5,8 @@ interface SchoolUserRoleButtonsProps {
   onChange: (role: OnboardRole) => void;
   /** When false, Parent is omitted (matches signup when parent portal is disabled). */
   parentPortalEnabled?: boolean;
+  /** Restrict which roles appear (defaults to student/parent/teacher). */
+  allowedRoles?: OnboardRole[];
   disabled?: boolean;
   label?: string;
 }
@@ -13,12 +15,14 @@ export function SchoolUserRoleButtons({
   value,
   onChange,
   parentPortalEnabled = true,
+  allowedRoles,
   disabled = false,
   label = 'I am a',
 }: SchoolUserRoleButtonsProps) {
-  const roles: OnboardRole[] = parentPortalEnabled
+  const defaultRoles: OnboardRole[] = parentPortalEnabled
     ? ['STUDENT', 'PARENT', 'TEACHER']
     : ['STUDENT', 'TEACHER'];
+  const roles = allowedRoles ?? defaultRoles;
 
   return (
     <div>

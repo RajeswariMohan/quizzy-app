@@ -14,6 +14,11 @@ export interface AuthTokensResponse {
   tenant: TenantContext;
 }
 
+export interface RegisterPendingResponse {
+  pendingApproval: true;
+  message: string;
+}
+
 @Injectable()
 export class AuthService {
   constructor(

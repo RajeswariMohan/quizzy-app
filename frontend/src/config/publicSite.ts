@@ -14,7 +14,11 @@ export const PUBLIC_SITE = {
     'Quizzy is a school quiz platform that helps students practice with purpose, gives teachers clear insights by grade, and keeps parents informed about progress.',
   heroSubtext:
     'Assign quizzes, celebrate effort with XP and streaks, and review results by grade and subject in one secure portal for your school.',
-  supportEmail: trimOrUndefined(import.meta.env.VITE_SUPPORT_EMAIL) ?? 'support@quizzy.app',
+  /** Public frontend origin (join links, marketing URLs). */
+  siteUrl:
+    trimOrUndefined(import.meta.env.VITE_PUBLIC_SITE_URL) ?? 'https://quizzyco.com',
+  supportEmail:
+    trimOrUndefined(import.meta.env.VITE_SUPPORT_EMAIL) ?? 'support@quizzyco.com',
   supportUrl: trimOrUndefined(import.meta.env.VITE_SUPPORT_URL),
   termsUrl: trimOrUndefined(import.meta.env.VITE_TERMS_URL),
   privacyUrl: trimOrUndefined(import.meta.env.VITE_PRIVACY_URL),
@@ -24,4 +28,10 @@ export const PUBLIC_SITE = {
 
 export function supportMailtoHref(): string {
   return `mailto:${PUBLIC_SITE.supportEmail}`;
+}
+
+/** School invite link for teachers and students (always uses the public site URL). */
+export function publicJoinUrl(schoolSlug: string): string {
+  const base = PUBLIC_SITE.siteUrl.replace(/\/$/, '');
+  return `${base}/join/${encodeURIComponent(schoolSlug.trim())}`;
 }

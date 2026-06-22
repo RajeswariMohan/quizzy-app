@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PUBLIC_SITE, supportMailtoHref } from '@/config/publicSite';
+import { PUBLIC_SITE, publicJoinUrl, supportMailtoHref } from '@/config/publicSite';
 import {
   LANDING_AUDIENCES,
   LANDING_COMMUNITY_SUMMARY,
@@ -22,13 +22,20 @@ function allLandingStrings(): string[] {
 }
 
 describe('publicSite config', () => {
-  it('exposes product name and support email', () => {
+  it('exposes product name, site URL, and support email', () => {
     expect(PUBLIC_SITE.productName).toBe('Quizzy');
-    expect(PUBLIC_SITE.supportEmail).toMatch(/@/);
+    expect(PUBLIC_SITE.siteUrl).toBe('https://quizzyco.com');
+    expect(PUBLIC_SITE.supportEmail).toBe('support@quizzyco.com');
   });
 
   it('builds mailto href from support email', () => {
-    expect(supportMailtoHref()).toBe(`mailto:${PUBLIC_SITE.supportEmail}`);
+    expect(supportMailtoHref()).toBe('mailto:support@quizzyco.com');
+  });
+
+  it('builds school join links from the public site URL', () => {
+    expect(publicJoinUrl('greenfield-high')).toBe(
+      'https://quizzyco.com/join/greenfield-high',
+    );
   });
 });
 

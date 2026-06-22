@@ -170,7 +170,9 @@ export class SchoolAdminService {
     if (status === SchoolUserStatusFilter.ACTIVE) {
       qb.andWhere('u.is_active = true');
     } else if (status === SchoolUserStatusFilter.INACTIVE) {
-      qb.andWhere('u.is_active = false');
+      qb.andWhere('u.is_active = false').andWhere('u.signup_pending_at IS NULL');
+    } else if (status === SchoolUserStatusFilter.PENDING) {
+      qb.andWhere('u.signup_pending_at IS NOT NULL');
     }
 
     const search = query.search?.trim();
@@ -482,6 +484,7 @@ export class SchoolAdminService {
 
     if (isActive) {
       await this.schoolLimitsService.assertCanAddUser(user.schoolId!, user.role);
+      user.signupPendingAt = null;
     }
 
     user.isActive = isActive;
@@ -680,6 +683,7 @@ export class SchoolAdminService {
       parentEmail: u.parentEmail,
       signupSchoolNote: u.signupSchoolNote,
       isActive: u.isActive,
+      signupPendingAt: u.signupPendingAt?.toISOString() ?? null,
       createdAt: u.createdAt.toISOString(),
     };
   }

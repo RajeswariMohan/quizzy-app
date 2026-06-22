@@ -4,9 +4,10 @@ import {
   loginWithPassword,
   registerAccount,
   issueDevToken,
+  isRegisterPending,
 } from '@/api/auth.api';
 import { endSessionOnLogout } from '@/hooks/useSessionTracker';
-import type { DevSeedRole, RegisterPayload } from '@/api/auth.api';
+import type { DevSeedRole, RegisterPayload, RegisterResponse } from '@/api/auth.api';
 import {
   getAccessToken,
   setAccessToken,
@@ -47,7 +48,7 @@ interface AuthState {
   initialize: () => Promise<void>;
   completeSession: (accessToken: string) => Promise<void>;
   loginWithCredentials: (identifier: string, password: string) => Promise<void>;
-  register: (payload: RegisterPayload) => Promise<void>;
+  register: (payload: RegisterPayload) => Promise<RegisterResponse | void>;
   loginWithToken: (token: string) => Promise<void>;
   loginWithDevRole: (role: DevSeedRole) => Promise<void>;
   logout: () => Promise<void>;
@@ -124,8 +125,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   register: async (payload) => {
     set({ isLoading: true, error: null });
     try {
-      const { accessToken } = await registerAccount(payload);
-      await get().completeSession(accessToken);
+      const result = await registerAccount(payload);
+      if (isRegisterPending(result)) {
+        set({ isLoading: false });
+        return result;
+      }
+      await get().completeSession(result.accessToken);
       set({ isLoading: false });
     } catch (error) {
       logApiError('Registration failed', error);

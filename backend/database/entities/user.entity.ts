@@ -79,6 +79,10 @@ export class User {
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive: boolean;
 
+  /** Set when user registers via school join link and awaits admin/teacher approval. */
+  @Column({ name: 'signup_pending_at', type: 'timestamptz', nullable: true })
+  signupPendingAt: Date | null;
+
   @Column({ name: 'email_verified_at', type: 'timestamptz', nullable: true })
   emailVerifiedAt: Date | null;
 

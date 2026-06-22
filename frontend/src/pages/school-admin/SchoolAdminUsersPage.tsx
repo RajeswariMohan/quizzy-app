@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { RefreshCw, Pencil, UserX, UserCheck, Trash2, X } from 'lucide-react';
+import { Check, Copy, RefreshCw, Pencil, UserX, UserCheck, Trash2, X } from 'lucide-react';
 import { FilterPanel } from '@/components/layout/FilterPanel';
 import { PageWithScrollBelowFilter } from '@/components/layout/PageWithScrollBelowFilter';
 import { Card, CardTitle } from '@/components/ui/Card';
@@ -45,6 +45,7 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useSchoolAcademics } from '@/hooks/useSchoolAcademics';
 import { useSchoolFeatures } from '@/hooks/useSchoolFeatures';
 import { useAuthStore } from '@/store/authStore';
+import { publicJoinUrl } from '@/config/publicSite';
 import { TablePagination } from '@/components/ui/TablePagination';
 
 const EMPTY_ONBOARD_VALUES: SchoolUserOnboardValues = {
@@ -67,7 +68,11 @@ export function SchoolAdminUsersPage() {
   const [academics, setAcademics] = useState<SchoolAcademicConfig | null>(null);
   const [isUnlistedSchool, setIsUnlistedSchool] = useState(false);
   const [filterRole, setFilterRole] = useState<'ALL' | 'STUDENT' | 'TEACHER' | 'PARENT'>('ALL');
-  const [filterStatus, setFilterStatus] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ACTIVE');
+  const [filterStatus, setFilterStatus] = useState<'ALL' | 'ACTIVE' | 'INACTIVE' | 'PENDING'>(
+    'ACTIVE',
+  );
+  const [schoolSlug, setSchoolSlug] = useState<string | null>(null);
+  const [joinLinkCopied, setJoinLinkCopied] = useState(false);
   const [search, setSearch] = useState('');
   const [filterGrade, setFilterGrade] = useState('All');
   const [filterAcademicGroup, setFilterAcademicGroup] = useState<AcademicGroupFilterValues>({
@@ -112,7 +117,9 @@ export function SchoolAdminUsersPage() {
         ? 'all'
         : filterStatus === 'INACTIVE'
           ? 'inactive'
-          : 'active';
+          : filterStatus === 'PENDING'
+            ? 'pending'
+            : 'active';
     const gradeSections = schoolGradeSections;
     const sectionFilter =
       filterGrade !== 'All'
@@ -138,6 +145,7 @@ export function SchoolAdminUsersPage() {
         setUsers(userRows);
         setAcademics(academicConfig);
         setIsUnlistedSchool(overview.school.slug === 'unlisted');
+        setSchoolSlug(overview.school.slug === 'unlisted' ? null : overview.school.slug);
       })
       .catch((err) => {
         logApiError('Load school users failed', err);
@@ -173,6 +181,36 @@ export function SchoolAdminUsersPage() {
     setFilterStatus('ACTIVE');
     setFilterGrade('All');
     setFilterAcademicGroup({ ...DEFAULT_ACADEMIC_GROUP_FILTER });
+  };
+
+  const joinLink = schoolSlug ? publicJoinUrl(schoolSlug) : null;
+
+  const copyJoinLink = async () => {
+    if (!joinLink) return;
+    try {
+      await navigator.clipboard.writeText(joinLink);
+      setJoinLinkCopied(true);
+      window.setTimeout(() => setJoinLinkCopied(false), 2000);
+    } catch {
+      setError('Could not copy link. Select and copy it manually.');
+    }
+  };
+
+  const handleApprovePending = async (user: SchoolUserRow) => {
+    const name = `${user.firstName} ${user.lastName}`.trim();
+    if (!window.confirm(`Approve ${name}? They will be able to sign in.`)) return;
+    setActionUserId(user.id);
+    setError(null);
+    try {
+      await setSchoolUserActive(user.id, true);
+      setFormSuccess(`${name} approved.`);
+      load();
+    } catch (err) {
+      logApiError('Approve pending user failed', err);
+      setError(getApiErrorMessage(err, 'Could not approve user.'));
+    } finally {
+      setActionUserId(null);
+    }
   };
 
   const handleSetActive = async (user: SchoolUserRow, isActive: boolean) => {
@@ -321,7 +359,7 @@ export function SchoolAdminUsersPage() {
               label="Status"
               value={filterStatus}
               onChange={(v) => setFilterStatus(v as typeof filterStatus)}
-              options={['ACTIVE', 'INACTIVE', 'ALL']}
+              options={['ACTIVE', 'PENDING', 'INACTIVE', 'ALL']}
             />
             <FieldSelect
               label="Grade"
@@ -349,6 +387,33 @@ export function SchoolAdminUsersPage() {
         </FilterPanel>
       }
     >
+      {joinLink && (
+        <Card>
+          <CardTitle>School join link</CardTitle>
+          <p className="mt-1 text-sm text-muted">
+            Share this link so students and teachers can request access to your school.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <code className="min-w-0 flex-1 truncate rounded-lg bg-surface px-3 py-2 text-xs text-ink">
+              {joinLink}
+            </code>
+            <Button type="button" variant="outline" size="sm" onClick={() => void copyJoinLink()}>
+              {joinLinkCopied ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  Copied
+                </>
+              ) : (
+                <>
+                  <Copy className="h-4 w-4" />
+                  Copy
+                </>
+              )}
+            </Button>
+          </div>
+        </Card>
+      )}
+
       <Card>
         <CardTitle>Add user</CardTitle>
         <form onSubmit={(e) => void handleCreate(e)} className="mt-4">
@@ -438,7 +503,9 @@ export function SchoolAdminUsersPage() {
                     )}
                     <td className="py-2.5 pr-3">{u.role.replace('_', ' ')}</td>
                     <td className="py-2.5 pr-3">
-                      {u.isActive ? (
+                      {u.signupPendingAt ? (
+                        <Badge className="bg-amber-100 text-amber-800">Pending approval</Badge>
+                      ) : u.isActive ? (
                         <Badge className="bg-success/15 text-success">Active</Badge>
                       ) : (
                         <Badge className="bg-gray-200 text-muted">Inactive</Badge>
@@ -447,6 +514,17 @@ export function SchoolAdminUsersPage() {
                     <td className="py-2.5">
                       {editable ? (
                         <div className="flex flex-wrap gap-1.5">
+                          {u.signupPendingAt && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => void handleApprovePending(u)}
+                              disabled={busy}
+                            >
+                              <UserCheck className="h-3.5 w-3.5" />
+                              Approve
+                            </Button>
+                          )}
                           <Button
                             type="button"
                             variant="outline"
@@ -463,7 +541,7 @@ export function SchoolAdminUsersPage() {
                               variant="outline"
                               size="sm"
                               onClick={() => void handleSetActive(u, false)}
-                              disabled={busy}
+                              disabled={busy || Boolean(u.signupPendingAt)}
                             >
                               <UserX className="h-3.5 w-3.5" />
                               Deactivate

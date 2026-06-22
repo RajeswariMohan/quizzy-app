@@ -15,12 +15,26 @@ export interface RegisterPayload {
   lastName: string;
   role: Extract<UserRole, 'STUDENT' | 'PARENT' | 'TEACHER'>;
   schoolId?: string;
+  schoolSlug?: string;
   board?: string;
   grade?: string;
   section?: string;
   parentEmail?: string;
   /** Student only: when school is not listed */
   signupSchoolNote?: string;
+}
+
+export interface RegisterPendingResponse {
+  pendingApproval: true;
+  message: string;
+}
+
+export type RegisterResponse = AuthTokenResponse | RegisterPendingResponse;
+
+export function isRegisterPending(
+  response: RegisterResponse,
+): response is RegisterPendingResponse {
+  return 'pendingApproval' in response && response.pendingApproval === true;
 }
 
 export interface UsernameAvailabilityResponse {
@@ -51,8 +65,8 @@ export async function checkUsernameAvailability(
   return data;
 }
 
-export async function registerAccount(payload: RegisterPayload): Promise<AuthTokenResponse> {
-  const { data } = await apiClient.post<AuthTokenResponse>('/auth/register', payload);
+export async function registerAccount(payload: RegisterPayload): Promise<RegisterResponse> {
+  const { data } = await apiClient.post<RegisterResponse>('/auth/register', payload);
   return data;
 }
 
