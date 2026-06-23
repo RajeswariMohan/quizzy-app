@@ -464,8 +464,8 @@ export function applyQuizListFilters(
           sectionLetter: filters.academicGroup.sectionLetter,
           group: filters.academicGroup.group,
         },
-        resolveQuizGrade,
-        getQuizSectionLabel,
+        (q) => resolveQuizGrade(q as QuizSummary),
+        (q) => getQuizSectionLabel(q as QuizSummary),
       )
     ) {
       return false;

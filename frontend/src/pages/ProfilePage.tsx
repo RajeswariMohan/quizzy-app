@@ -171,11 +171,6 @@ export function ProfilePage() {
     );
   }
 
-  const gradeOptions =
-    profile.academicOptions?.grades.length
-      ? profile.academicOptions.grades
-      : schoolGrades;
-
   const initials = (displayName || firstName || 'U').charAt(0).toUpperCase();
 
   return (
