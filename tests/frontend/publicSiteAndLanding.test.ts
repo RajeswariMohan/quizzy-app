@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PUBLIC_SITE, publicJoinUrl, supportMailtoHref } from '@/config/publicSite';
+import { PUBLIC_SITE, publicJoinUrl, parseBoolEnv, supportMailtoHref } from '@/config/publicSite';
 import {
   LANDING_AUDIENCES,
   LANDING_COMMUNITY_SUMMARY,
@@ -36,6 +36,18 @@ describe('publicSite config', () => {
     expect(publicJoinUrl('greenfield-high')).toBe(
       'https://quizzyco.com/join/greenfield-high',
     );
+  });
+
+  it('defaults demoMode to false when env is unset', () => {
+    expect(PUBLIC_SITE.demoMode).toBe(false);
+  });
+
+  it('parseBoolEnv accepts common true values', () => {
+    expect(parseBoolEnv('true')).toBe(true);
+    expect(parseBoolEnv('1')).toBe(true);
+    expect(parseBoolEnv('yes')).toBe(true);
+    expect(parseBoolEnv('false')).toBe(false);
+    expect(parseBoolEnv(undefined)).toBe(false);
   });
 });
 

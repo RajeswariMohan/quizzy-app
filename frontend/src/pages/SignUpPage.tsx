@@ -37,6 +37,7 @@ import {
   PARENT_SIGNUP_HINT,
   USERNAME_HINT,
 } from '@/utils/schoolUserOnboarding';
+import { PUBLIC_SITE, supportMailtoHref } from '@/config/publicSite';
 import type { UserRole } from '@/types/auth';
 
 type SignupRole = Extract<UserRole, 'STUDENT' | 'PARENT' | 'TEACHER'>;
@@ -88,6 +89,9 @@ export function SignUpPage() {
     return parentPortalEnabled ? ['STUDENT', 'PARENT'] : ['STUDENT'];
   }, [isJoinFlow, parentPortalEnabled]);
 
+  const studentSignupBlockedInDemo =
+    PUBLIC_SITE.demoMode && !isJoinFlow && role === 'STUDENT';
+
   const schoolNameOptions = useMemo(
     () => uniqueRegisterSchoolNames(schools),
     [schools],
@@ -108,7 +112,7 @@ export function SignUpPage() {
   const schoolSelectOptions = useMemo(() => {
     if (isJoinFlow) return [];
     if (role === 'STUDENT') {
-      if (!otherSchoolId) return [];
+      if (PUBLIC_SITE.demoMode || !otherSchoolId) return [];
       return [{ value: OTHER_SCHOOL_VALUE, label: 'My school is not listed' }];
     }
     return schoolNameOptions.map((name) => ({ value: name, label: name }));
@@ -170,7 +174,7 @@ export function SignUpPage() {
         const names = uniqueRegisterSchoolNames(data.schools);
         const initialName =
           role === 'STUDENT'
-            ? data.otherSchoolId
+            ? !PUBLIC_SITE.demoMode && data.otherSchoolId
               ? OTHER_SCHOOL_VALUE
               : ''
             : (names[0] ?? '');
@@ -227,8 +231,13 @@ export function SignUpPage() {
 
   useEffect(() => {
     if (isJoinFlow) return;
-    if (role === 'STUDENT' && otherSchoolId) {
+    if (role === 'STUDENT' && otherSchoolId && !PUBLIC_SITE.demoMode) {
       setSchoolName(OTHER_SCHOOL_VALUE);
+      setSelectedBoard('');
+      return;
+    }
+    if (role === 'STUDENT' && PUBLIC_SITE.demoMode) {
+      setSchoolName('');
       setSelectedBoard('');
       return;
     }
@@ -493,6 +502,22 @@ export function SignUpPage() {
 
             {requiresSchool && !isJoinFlow && (
               <>
+                {studentSignupBlockedInDemo ? (
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-4 text-sm text-ink">
+                    <p className="font-medium">Student signup is invite-only during our demo</p>
+                    <p className="mt-2 text-muted">
+                      Ask your school for a join link, or email{' '}
+                      <a
+                        href={supportMailtoHref()}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        {PUBLIC_SITE.supportEmail}
+                      </a>{' '}
+                      for help getting access.
+                    </p>
+                  </div>
+                ) : (
+                  <>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-ink">School</label>
                   <select
@@ -561,6 +586,8 @@ export function SignUpPage() {
                       onChange={(e) => setSignupSchoolNote(e.target.value)}
                     />
                   </div>
+                )}
+                  </>
                 )}
               </>
             )}
@@ -655,6 +682,7 @@ export function SignUpPage() {
               className="w-full py-3"
               disabled={
                 isLoading ||
+                studentSignupBlockedInDemo ||
                 (requiresSchool && (!schoolId || (!isOtherSchool && boardOptions.length > 0 && !selectedBoard))) ||
                 (role === 'STUDENT' &&
                   (usernameChecking || usernameAvailable === false || !!validateUsername(username)))

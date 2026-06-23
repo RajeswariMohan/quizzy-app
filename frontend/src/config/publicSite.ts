@@ -7,6 +7,12 @@ const trimOrUndefined = (value: string | undefined): string | undefined => {
   return trimmed ? trimmed : undefined;
 };
 
+/** Parse Vite boolean env vars (true / 1 / yes, case-insensitive). */
+export function parseBoolEnv(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
+
 export const PUBLIC_SITE = {
   productName: 'Quizzy',
   tagline: 'Learn. Practice. Excel.',
@@ -24,6 +30,11 @@ export const PUBLIC_SITE = {
   privacyUrl: trimOrUndefined(import.meta.env.VITE_PRIVACY_URL),
   /** Hosted demo video (MP4/WebM URL or path such as /videos/demo.mp4). */
   demoVideoUrl: trimOrUndefined(import.meta.env.VITE_DEMO_VIDEO_URL),
+  /**
+   * Public demo deploy: hide unlisted student signup and show contact-first Watch demo modal.
+   * Set VITE_PUBLIC_DEMO_MODE=true on Vercel for quizzyco.com demo.
+   */
+  demoMode: parseBoolEnv(import.meta.env.VITE_PUBLIC_DEMO_MODE),
 } as const;
 
 export function supportMailtoHref(): string {
