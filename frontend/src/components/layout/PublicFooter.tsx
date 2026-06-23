@@ -122,17 +122,7 @@ export function PublicFooter() {
           <p>
             © {year} {PUBLIC_SITE.productName}. All rights reserved.
           </p>
-          <p>
-            Built for schools with secure, tenant-isolated data.
-            {import.meta.env.DEV && (
-              <>
-                {' '}
-                <Link to="/login/dev" className="text-primary hover:underline">
-                  Dev login
-                </Link>
-              </>
-            )}
-          </p>
+          <p>Built for schools with secure, tenant-isolated data.</p>
         </div>
       </div>
     </footer>

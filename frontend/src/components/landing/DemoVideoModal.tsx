@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { Mail, Play, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -24,6 +25,8 @@ export function DemoVideoModal({ open, onClose }: DemoVideoModalProps) {
   const [sourceLabel, setSourceLabel] = useState<'hosted' | 'uploaded' | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const isDemoContactMode = PUBLIC_SITE.demoMode;
 
   const revokeIfBlob = useCallback((src: string | null) => {
     if (src?.startsWith('blob:')) {
@@ -60,6 +63,14 @@ export function DemoVideoModal({ open, onClose }: DemoVideoModalProps) {
 
     const load = async () => {
       try {
+        if (isDemoContactMode) {
+          if (cancelled) return;
+          if (PUBLIC_SITE.demoVideoUrl) {
+            applyUrlSource(PUBLIC_SITE.demoVideoUrl);
+          }
+          return;
+        }
+
         const uploaded = await loadDemoVideoBlob();
         if (cancelled) return;
         if (uploaded) {
@@ -70,7 +81,7 @@ export function DemoVideoModal({ open, onClose }: DemoVideoModalProps) {
           applyUrlSource(PUBLIC_SITE.demoVideoUrl);
         }
       } catch {
-        if (!cancelled && PUBLIC_SITE.demoVideoUrl) {
+        if (!cancelled && !isDemoContactMode && PUBLIC_SITE.demoVideoUrl) {
           applyUrlSource(PUBLIC_SITE.demoVideoUrl);
         }
       }
@@ -81,7 +92,7 @@ export function DemoVideoModal({ open, onClose }: DemoVideoModalProps) {
     return () => {
       cancelled = true;
     };
-  }, [open, applyBlobSource, applyUrlSource]);
+  }, [open, isDemoContactMode, applyBlobSource, applyUrlSource]);
 
   useEffect(() => {
     if (open) return;
@@ -155,8 +166,6 @@ export function DemoVideoModal({ open, onClose }: DemoVideoModalProps) {
 
   if (!open) return null;
 
-  const isDemoContactMode = PUBLIC_SITE.demoMode;
-
   const uploadSection = (
     <div className="rounded-xl border border-dashed border-gray-200 bg-surface/80 p-4">
       <p className="text-sm font-medium text-ink">Upload product demo</p>
@@ -207,9 +216,9 @@ export function DemoVideoModal({ open, onClose }: DemoVideoModalProps) {
     </div>
   );
 
-  return (
+  const modal = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6"
       role="presentation"
       onClick={onClose}
     >
@@ -218,10 +227,12 @@ export function DemoVideoModal({ open, onClose }: DemoVideoModalProps) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative z-10 flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl"
+        className={`relative z-10 flex max-h-[min(90dvh,90vh)] w-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl ${
+          isDemoContactMode ? 'max-w-md' : 'max-w-3xl'
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-gray-100 px-5 py-4 sm:px-6">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-gray-100 px-5 py-4 sm:px-6">
           <div>
             <h2 id={titleId} className="text-lg font-bold text-ink">
               {isDemoContactMode ? 'Request a demo' : `How to use ${PUBLIC_SITE.productName}`}
@@ -242,9 +253,9 @@ export function DemoVideoModal({ open, onClose }: DemoVideoModalProps) {
           </button>
         </div>
 
-        <div className="overflow-y-auto px-5 py-4 sm:px-6">
-          {isDemoContactMode && (
-            <div className="mb-5 rounded-xl border border-primary/20 bg-primary/5 p-5 text-center sm:text-left">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-6">
+          {isDemoContactMode ? (
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 text-center sm:text-left">
               <Mail className="mx-auto h-8 w-8 text-primary sm:mx-0" aria-hidden />
               <p className="mt-3 text-sm text-ink">
                 For a personalized demo, email us at{' '}
@@ -269,52 +280,57 @@ export function DemoVideoModal({ open, onClose }: DemoVideoModalProps) {
                 </Link>
               </div>
             </div>
-          )}
-
-          {(videoSrc || !isDemoContactMode) && (
-            <div className="aspect-video overflow-hidden rounded-xl bg-ink/5">
-              {videoSrc ? (
-                <video
-                  key={videoSrc}
-                  src={videoSrc}
-                  controls
-                  playsInline
-                  className="h-full w-full bg-black object-contain"
-                >
-                  <track kind="captions" />
-                </video>
-              ) : (
-                <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-3 p-6 text-center">
-                  <Play className="h-10 w-10 text-primary/40" aria-hidden />
-                  <p className="text-sm text-muted">
-                    No demo video is available yet. Upload one below, or set{' '}
-                    <code className="rounded bg-gray-100 px-1 text-xs">VITE_DEMO_VIDEO_URL</code> in
-                    your deployment environment.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {sourceLabel === 'uploaded' && videoSrc && (
-            <p className="mt-2 text-xs text-muted">
-              Showing your uploaded demo (saved in this browser only).
-            </p>
-          )}
-
-          {isDemoContactMode ? (
-            <details className="mt-5 group">
-              <summary className="cursor-pointer text-sm font-medium text-ink">
-                Upload demo video (optional)
-              </summary>
-              <div className="mt-3">{uploadSection}</div>
-            </details>
           ) : (
-            <div className="mt-5">{uploadSection}</div>
+            <>
+              <div className="aspect-video overflow-hidden rounded-xl bg-ink/5">
+                {videoSrc ? (
+                  <video
+                    key={videoSrc}
+                    src={videoSrc}
+                    controls
+                    playsInline
+                    className="h-full w-full bg-black object-contain"
+                  >
+                    <track kind="captions" />
+                  </video>
+                ) : (
+                  <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-3 p-6 text-center">
+                    <Play className="h-10 w-10 text-primary/40" aria-hidden />
+                    <p className="text-sm text-muted">
+                      No demo video is available yet. Upload one below, or set{' '}
+                      <code className="rounded bg-gray-100 px-1 text-xs">VITE_DEMO_VIDEO_URL</code>{' '}
+                      in your deployment environment.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {sourceLabel === 'uploaded' && videoSrc && (
+                <p className="mt-2 text-xs text-muted">
+                  Showing your uploaded demo (saved in this browser only).
+                </p>
+              )}
+
+              <div className="mt-5">{uploadSection}</div>
+            </>
+          )}
+
+          {isDemoContactMode && videoSrc && (
+            <div className="mt-5 aspect-video overflow-hidden rounded-xl bg-ink/5">
+              <video
+                key={videoSrc}
+                src={videoSrc}
+                controls
+                playsInline
+                className="h-full w-full bg-black object-contain"
+              >
+                <track kind="captions" />
+              </video>
+            </div>
           )}
         </div>
 
-        <div className="border-t border-gray-100 px-5 py-4 sm:px-6">
+        <div className="shrink-0 border-t border-gray-100 px-5 py-4 sm:px-6">
           <Button type="button" className="w-full sm:w-auto" onClick={onClose}>
             Close
           </Button>
@@ -322,4 +338,6 @@ export function DemoVideoModal({ open, onClose }: DemoVideoModalProps) {
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 }
